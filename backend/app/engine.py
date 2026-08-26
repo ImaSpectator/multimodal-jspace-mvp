@@ -5,7 +5,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Iterable
 
-from .schemas import BackendEvent, Concept, Conflict, CustomerTurn, Evidence, ImageObservation, SessionConfig, SessionState
+from .schemas import BackendEvent, Concept, Conflict, CustomerTurn, Evidence, ImageObservation, SessionState
+
+
+NEGATIVE_EMOTIONS = {"uncertain", "confused", "anxious", "disappointed", "frustrated", "angry", "impatient", "skeptical", "distressed"}
+RESOLVED_VISUAL_VALUES = {
+    "appears successful", "delivered", "wifi visible", "partial access", "cancellation requested",
+    "new itinerary visible", "return completed", "100% progress", "connected", "workspace visible",
+    "adjusted badge", "confirmed", "active", "upgrade visible", "cancelled", "ticket visible",
+    "upgrade complete", "completed",
+}
 
 
 def _now() -> str:
@@ -24,11 +33,42 @@ def _concept(name: str, value: str, source: str, evidence: str, *, confidence: f
         value=value,
         sources=[source],
         evidence=[Evidence(source=source, detail=evidence)],
-        confidence=confidence,
-        task_relevance=relevance,
-        conflict_importance=conflict_importance,
+        confidence=max(0.0, min(1.0, confidence)),
+        task_relevance=max(0.0, min(1.0, relevance)),
+        conflict_importance=max(0.0, min(1.0, conflict_importance)),
         status=status,
     )
+
+
+def infer_text_emotion(text: str) -> tuple[str, float]:
+    low = text.lower()
+    exclamations = text.count("!")
+    question_marks = text.count("?")
+    patterns = [
+        ("angry", ["ridiculous", "unacceptable", "furious", "angry", "this is insane", "terrible"]),
+        ("distressed", ["desperate", "emergency", "please help", "can't deal", "really scared"]),
+        ("frustrated", ["frustrated", "again", "already", "still not", "keeps", "why is this", "fed up"]),
+        ("impatient", ["hurry", "right now", "quickly", "how long", "immediately", "today"]),
+        ("skeptical", ["don't believe", "are you sure", "supposedly", "can i trust", "actually correct"]),
+        ("anxious", ["worried", "anxious", "nervous", "concerned", "deadline", "tomorrow"]),
+        ("confused", ["confused", "don't understand", "doesn't make sense", "what does", "why does"]),
+        ("disappointed", ["disappointed", "expected better", "let down"]),
+        ("relieved", ["relieved", "thank goodness", "finally works", "that's a relief"]),
+        ("appreciative", ["thank you", "thanks", "appreciate"]),
+        ("hopeful", ["hopefully", "hope this", "sounds promising"]),
+        ("satisfied", ["perfect", "great", "that works", "all set"]),
+        ("embarrassed", ["my mistake", "sorry, i", "embarrassing"]),
+    ]
+    for emotion, terms in patterns:
+        if any(term in low for term in terms):
+            base = 0.58
+            if emotion in {"angry", "distressed", "frustrated"}:
+                base = 0.68
+            intensity = min(0.98, base + 0.05 * exclamations + 0.02 * question_marks + min(len(text) / 800, 0.12))
+            return emotion, round(intensity, 2)
+    if question_marks >= 2:
+        return "uncertain", min(0.82, round(0.48 + 0.05 * question_marks, 2))
+    return "neutral", round(min(0.65, 0.34 + len(text) / 600), 2)
 
 
 def extract_from_turn(turn: CustomerTurn) -> list[Concept]:
@@ -36,120 +76,93 @@ def extract_from_turn(turn: CustomerTurn) -> list[Concept]:
     low = text.lower()
     out: list[Concept] = []
 
-    # Generic state / resolution language used across all domains.
-    resolved_phrases = ["it worked", "it's working", "its working", "fixed now", "resolved", "all good now",
-                        "fine now", "looks fixed", "looks good", "it arrived", "i got it", "can log in now"]
-    unresolved_phrases = ["still not working", "still failing", "not fixed", "still broken", "still doesn't work",
-                          "still locked", "still missing", "never arrived", "still pending", "not here yet"]
-    resolved_signal = any(k in low for k in resolved_phrases) or any(k in low for k in [
-        "worked now", "working now", "got back in now", "cancelled now", "canceled now",
-        "completed now", "delivered now", "resolved now", "seems resolved", "looks resolved"
-    ])
-    if resolved_signal:
+    resolved_phrases = [
+        "it worked", "it's working", "its working", "fixed now", "resolved", "all good", "fine now",
+        "looks fixed", "looks good", "got back in", "cancelled now", "canceled now", "completed now",
+        "delivered now", "went through", "successful now",
+    ]
+    unresolved_phrases = [
+        "still not", "still failing", "not fixed", "still broken", "doesn't work", "doesnt work", "still locked",
+        "still missing", "never arrived", "still pending", "not here", "keeps dropping", "can't", "cannot",
+    ]
+    if any(k in low for k in resolved_phrases):
         out.append(_concept("customer_belief_status", "resolved", "text", text,
-                            confidence=0.86, relevance=0.93, conflict_importance=0.55))
-    if any(k in low for k in unresolved_phrases):
+                            confidence=0.84, relevance=0.92, conflict_importance=0.55))
+    elif any(k in low for k in unresolved_phrases):
         out.append(_concept("customer_belief_status", "unresolved", "text", text,
-                            confidence=0.92, relevance=0.96, conflict_importance=0.30))
+                            confidence=0.90, relevance=0.94, conflict_importance=0.25))
 
-    # Repeated effort is broadly relevant in customer support.
-    m = re.search(r"(?:tried|attempted|called|restarted|reset)(?: it)?\s+(\w+|\d+)\s+times", low)
+    m = re.search(r"(?:tried|attempted|called|restarted|reset|contacted)(?: it)?\s+(\w+|\d+)\s+times", low)
     if m:
         raw = m.group(1)
         word_map = {"once": 1, "twice": 2, "three": 3, "four": 4, "five": 5, "six": 6}
         n = word_map.get(raw, int(raw) if raw.isdigit() else None)
         if n:
-            out.append(_concept("retry_count", str(n), "text", text, confidence=0.96, relevance=0.93))
-            out.append(_concept("avoid_repeat_action", "do not repeat already-attempted troubleshooting", "derived", text,
-                                confidence=0.91, relevance=0.98))
-    if any(k in low for k in ["already tried", "already did", "already restarted", "asked me that already",
-                              "keep trying", "done that already", "already called"]):
-        out.append(_concept("troubleshooting_already_attempted", "customer already completed a suggested step", "text", text,
+            out.append(_concept("retry_count", str(n), "text", text, confidence=0.94, relevance=0.90))
+            out.append(_concept("avoid_repeat_action", "avoid repeating completed troubleshooting", "derived", text,
+                                confidence=0.90, relevance=0.96))
+    if any(k in low for k in ["already tried", "already did", "already restarted", "already reset", "already contacted", "asked me that already"]):
+        out.append(_concept("prior_effort", "customer has already completed troubleshooting", "text", text,
                             confidence=0.90, relevance=0.92))
-        out.append(_concept("avoid_repeat_action", "do not repeat already-attempted troubleshooting", "derived", text,
-                            confidence=0.91, relevance=0.98))
+        out.append(_concept("avoid_repeat_action", "avoid repeating completed troubleshooting", "derived", text,
+                            confidence=0.91, relevance=0.97))
 
-    # Domain cues. These don't decide the answer; they help keep the active workspace interpretable.
     domain_patterns = {
         "payment": ["payment", "pay", "card", "transaction", "checkout", "declined"],
-        "delivery": ["package", "delivery", "shipment", "tracking", "arrive", "courier"],
-        "internet": ["internet", "wifi", "wi-fi", "router", "modem", "connection", "offline"],
-        "account_access": ["login", "log in", "password", "locked", "account", "verification code"],
+        "delivery": ["package", "delivery", "shipment", "tracking", "courier", "arrived"],
+        "internet": ["internet", "wifi", "wi-fi", "router", "modem", "connection", "outage"],
+        "account_access": ["login", "log in", "password", "locked", "account access", "verification"],
         "subscription": ["subscription", "cancel", "membership", "renewal", "charged again"],
-        "travel": ["flight", "booking", "reservation", "hotel", "seat", "rebook"],
+        "travel": ["flight", "booking", "itinerary", "ticketed", "reservation", "seat"],
         "return_refund": ["refund", "return", "returned", "money back"],
-        "insurance_claim": ["claim", "insurance", "documents", "adjuster", "coverage"],
+        "insurance_claim": ["claim", "insurance", "adjuster", "proof-of-loss"],
+        "device_support": ["device", "speaker", "firmware", "smart", "disconnecting"],
+        "software_saas": ["workspace", "dashboard", "permission", "access denied", "admin"],
+        "utilities": ["electricity", "utility", "meter", "bill", "reading"],
+        "healthcare_appointment": ["appointment", "patient portal", "clinician", "visit"],
+        "banking_fraud": ["fraud", "dispute", "don't recognize", "card active", "unauthorized"],
+        "hotel_hospitality": ["hotel", "room", "check in", "upgrade"],
+        "rideshare": ["driver", "ride", "pickup", "cancelled ride"],
+        "event_ticketing": ["concert", "event", "barcode", "ticket transfer"],
+        "telecom_mobile": ["mobile plan", "data limit", "carrier", "network settings"],
+        "marketplace_dispute": ["marketplace", "seller", "replacement", "case", "dispute"],
     }
     for domain, patterns in domain_patterns.items():
         if any(p in low for p in patterns):
-            out.append(_concept("customer_domain", domain, "text", text, confidence=0.92, relevance=1.0, conflict_importance=0.10))
+            out.append(_concept("customer_domain", domain, "text", text, confidence=0.90, relevance=0.99))
             break
 
-    if any(k in low for k in ["failed", "declined", "not working", "won't go through", "doesn't work", "keeps failing"]):
-        out.append(_concept("customer_reported_problem", "operation failing", "text", text,
-                            confidence=0.93, relevance=0.94))
-    if any(k in low for k in ["late", "missing", "never arrived", "not here"]):
-        out.append(_concept("customer_reported_problem", "item or service missing/late", "text", text,
-                            confidence=0.92, relevance=0.94))
-    if any(k in low for k in ["locked out", "can't log in", "cannot log in", "password doesn't work"]):
-        out.append(_concept("customer_reported_problem", "account access blocked", "text", text,
-                            confidence=0.94, relevance=0.96))
-
-    if turn.audio_tone in {"frustrated", "angry"}:
-        out.append(_concept("customer_sentiment", turn.audio_tone, "audio", f"vocal tone={turn.audio_tone}",
-                            confidence=0.78 if turn.audio_tone == "frustrated" else 0.86,
-                            relevance=0.78, conflict_importance=0.25))
-    elif turn.audio_tone == "uncertain":
-        out.append(_concept("customer_sentiment", "uncertain", "audio", "vocal tone=uncertain",
-                            confidence=0.76, relevance=0.72, conflict_importance=0.20))
-    elif turn.audio_tone in {"calm", "neutral"}:
-        out.append(_concept("customer_sentiment", turn.audio_tone, "audio", f"vocal tone={turn.audio_tone}",
-                            confidence=0.72, relevance=0.55))
-
+    emotion = turn.emotion
+    intensity = turn.emotion_intensity
+    emotion_confidence = 0.56 + 0.39 * intensity
+    emotion_relevance = 0.45 + 0.45 * intensity
+    conflict_importance = (0.15 + 0.45 * intensity) if emotion in NEGATIVE_EMOTIONS else 0.05
+    evidence = f"emotion={emotion}; intensity={intensity:.0%}"
+    if turn.nonverbal_cue:
+        evidence += f"; cue={turn.nonverbal_cue}"
+    out.append(_concept("customer_emotion", emotion, "audio", evidence,
+                        confidence=emotion_confidence, relevance=emotion_relevance,
+                        conflict_importance=conflict_importance))
+    out.append(_concept("emotion_intensity", f"{intensity:.2f}", "audio", evidence,
+                        confidence=emotion_confidence, relevance=0.58 + 0.25 * intensity,
+                        conflict_importance=conflict_importance * 0.8))
     return out
 
 
 def extract_from_backend(event: BackendEvent) -> list[Concept]:
-    out: list[Concept] = []
     meta = event.metadata or {}
-
-    # Generic structured event used by the automated simulator and future real CRM adapters.
     if meta.get("concept_name"):
-        name = str(meta["concept_name"])
-        value = str(meta.get("concept_value", event.value))
-        out.append(_concept(
-            name,
-            value,
+        return [_concept(
+            str(meta["concept_name"]),
+            str(meta.get("concept_value", event.value)),
             "backend",
             str(meta.get("evidence", f"{event.event_type}={event.value}")),
-            confidence=float(meta.get("confidence", 0.98)),
+            confidence=float(meta.get("confidence", 0.97)),
             relevance=float(meta.get("relevance", 0.90)),
             conflict_importance=float(meta.get("conflict_importance", 0.0)),
             status=str(meta.get("status", "supported")),
-        ))
-        return out
-
-    # Backward-compatible payment events from v0.1.
-    if event.event_type == "payment_attempt":
-        out.append(_concept("backend_attempt_count", str(event.value), "backend", f"payment_attempt={event.value}",
-                            confidence=0.99, relevance=0.95))
-    elif event.event_type == "payment_status":
-        value = event.value.lower()
-        out.append(_concept("payment_status", value, "backend", f"payment_status={event.value}",
-                            confidence=0.995, relevance=0.99, conflict_importance=0.65))
-        status = "unresolved" if value in {"failed", "declined"} else "resolved" if value in {"succeeded", "success", "approved"} else value
-        out.append(_concept("authoritative_status", status, "backend", f"backend payment status={event.value}",
-                            confidence=0.99, relevance=0.99, conflict_importance=0.70))
-    elif event.event_type == "decline_reason":
-        out.append(_concept("root_cause", event.value, "backend", f"decline_reason={event.value}",
-                            confidence=0.99, relevance=1.0))
-    elif event.event_type == "case_status":
-        out.append(_concept("case_status", event.value, "backend", f"case_status={event.value}",
-                            confidence=0.98, relevance=0.88))
-    else:
-        out.append(_concept("backend_event", event.value, "backend", str(event.metadata) or event.value,
-                            confidence=0.90, relevance=0.60))
-    return out
+        )]
+    return [_concept("backend_event", event.value, "backend", f"{event.event_type}={event.value}", confidence=0.90, relevance=0.55)]
 
 
 def extract_from_image(obs: ImageObservation) -> list[Concept]:
@@ -163,20 +176,8 @@ def extract_from_image(obs: ImageObservation) -> list[Concept]:
             relevance=obs.relevance,
             conflict_importance=obs.conflict_importance,
         )]
-
-    low = obs.description.lower()
-    out: list[Concept] = []
-    error = re.search(r"(?:error|code)\s*([a-z0-9-]+)", low)
-    if error:
-        out.append(_concept("visual_error_code", error.group(1), "image", obs.description,
-                            confidence=0.92, relevance=0.88))
-    if any(k in low for k in ["failed", "declined", "unsuccessful", "error", "offline", "locked", "cancelled"]):
-        out.append(_concept("visual_problem_evidence", obs.description, "image", obs.description,
-                            confidence=0.82, relevance=0.86))
-    if not out:
-        out.append(_concept("visual_observation", obs.description, "image", obs.description,
-                            confidence=0.70, relevance=0.50))
-    return out
+    return [_concept("visual_observation", obs.description, "image", obs.description,
+                     confidence=obs.confidence, relevance=obs.relevance, conflict_importance=obs.conflict_importance)]
 
 
 def merge_concepts(existing: list[Concept], incoming: Iterable[Concept]) -> list[Concept]:
@@ -187,163 +188,186 @@ def merge_concepts(existing: list[Concept], incoming: Iterable[Concept]) -> list
             existing.append(new)
             by_name[new.name] = new
             continue
-        old.value = new.value
+        # Backend domain context is authoritative for a generated/manual case; later text cues
+        # may be ambiguous (e.g. a fraud case mentioning a card or a device case mentioning Wi-Fi).
+        if not (old.name == "customer_domain" and "backend" in old.sources and new.sources == ["text"]):
+            old.value = new.value
         old.confidence = max(old.confidence, new.confidence)
         old.task_relevance = max(old.task_relevance, new.task_relevance)
         old.conflict_importance = max(old.conflict_importance, new.conflict_importance)
         old.recency = 1.0
         old.updated_at = _now()
         old.status = new.status
-        old.evidence.extend(new.evidence)
+        old.evidence.extend(new.evidence[-2:])
         for src in new.sources:
             if src not in old.sources:
                 old.sources.append(src)
     return existing
 
 
-def decay_recency(concepts: list[Concept], factor: float = 0.94) -> None:
+def decay_recency(concepts: list[Concept], factor: float = 0.92) -> None:
     for c in concepts:
-        c.recency = max(0.1, round(c.recency * factor, 4))
+        c.recency = max(0.08, round(c.recency * factor, 4))
+
+
+def _parse_intensity(by_name: dict[str, Concept]) -> float:
+    try:
+        return float(by_name.get("emotion_intensity").value) if by_name.get("emotion_intensity") else 0.0
+    except ValueError:
+        return 0.0
 
 
 def detect_conflicts(concepts: list[Concept]) -> list[Conflict]:
     by_name = {c.name: c for c in concepts}
     conflicts: list[Conflict] = []
-
-    customer_status = by_name.get("customer_belief_status")
     authoritative = by_name.get("authoritative_status")
-    if customer_status and authoritative and customer_status.value != authoritative.value:
-        customer_status.status = "disputed"
-        authoritative.status = "disputed"
-        customer_status.conflict_importance = 1.0
-        authoritative.conflict_importance = 1.0
+    customer_status = by_name.get("customer_belief_status")
+    visible = by_name.get("customer_visible_status")
+
+    if authoritative and authoritative.value == "unresolved" and customer_status and customer_status.value == "resolved":
+        customer_status.status = authoritative.status = "disputed"
+        customer_status.conflict_importance = authoritative.conflict_importance = 1.0
         conflicts.append(Conflict(
             id=_cid("conflict"),
             concept_ids=[customer_status.id, authoritative.id],
-            description=(f"Customer believes the issue is {customer_status.value}, but the authoritative system says "
-                         f"{authoritative.value}."),
+            description="The customer believes the issue is resolved, but the authoritative system still shows it as unresolved.",
             severity="high",
             confidence=0.98,
         ))
 
-    sentiment = by_name.get("customer_sentiment")
-    if customer_status and sentiment and customer_status.value == "resolved" and sentiment.value in {"frustrated", "angry"}:
-        customer_status.status = "disputed"
-        sentiment.status = "disputed"
-        customer_status.conflict_importance = max(customer_status.conflict_importance, 0.75)
-        sentiment.conflict_importance = max(sentiment.conflict_importance, 0.75)
+    if authoritative and authoritative.value == "unresolved" and visible and visible.value.lower() in RESOLVED_VISUAL_VALUES:
+        visible.status = authoritative.status = "disputed"
+        visible.conflict_importance = max(visible.conflict_importance, 0.96)
+        authoritative.conflict_importance = 1.0
         conflicts.append(Conflict(
             id=_cid("conflict"),
-            concept_ids=[customer_status.id, sentiment.id],
-            description="Customer says the issue is resolved while vocal cues remain negative.",
-            severity="medium",
-            confidence=0.80,
+            concept_ids=[visible.id, authoritative.id],
+            description=f"Customer-facing evidence suggests '{visible.value}', while the authoritative system remains unresolved.",
+            severity="high",
+            confidence=0.96,
         ))
 
-    # Generic explicit pair conflict: scenario/backend adapters can publish two concepts with matching conflict_group.
-    # Pair-specific handling can be added later; the status conflict above is the core research case.
+    emotion = by_name.get("customer_emotion")
+    intensity = _parse_intensity(by_name)
+    if customer_status and customer_status.value == "resolved" and emotion and emotion.value in NEGATIVE_EMOTIONS and intensity >= 0.66:
+        customer_status.status = emotion.status = "disputed"
+        customer_status.conflict_importance = max(customer_status.conflict_importance, 0.72)
+        emotion.conflict_importance = max(emotion.conflict_importance, 0.72)
+        conflicts.append(Conflict(
+            id=_cid("conflict"),
+            concept_ids=[customer_status.id, emotion.id],
+            description=f"The customer says the issue is resolved, but their {emotion.value} affect remains strong ({intensity:.0%}).",
+            severity="medium",
+            confidence=min(0.94, 0.62 + intensity * 0.32),
+        ))
     return conflicts
 
 
-def choose_active(concepts: list[Concept], config: SessionConfig, conflicts: list[Conflict]) -> list[Concept]:
+def choose_active(concepts: list[Concept], capacity_k: int, preserve_conflicts: bool, conflicts: list[Conflict]) -> list[Concept]:
     ranked = sorted(concepts, key=lambda c: c.score, reverse=True)
-    selected = ranked[: config.capacity_k]
-
-    if config.preserve_conflicts:
+    selected = ranked[:capacity_k]
+    if preserve_conflicts:
         conflict_ids = {cid for conflict in conflicts for cid in conflict.concept_ids}
-        required = [c for c in ranked if c.id in conflict_ids]
         selected_ids = {c.id for c in selected}
-        for c in required:
+        for c in [x for x in ranked if x.id in conflict_ids]:
             if c.id in selected_ids:
                 continue
             evictable = [x for x in selected if not x.pinned and x.id not in conflict_ids]
             if evictable:
-                victim = sorted(evictable, key=lambda x: x.score)[0]
+                victim = min(evictable, key=lambda x: x.score)
                 selected.remove(victim)
                 selected_ids.remove(victim.id)
-            if len(selected) < config.capacity_k:
+            if len(selected) < capacity_k:
                 selected.append(c)
                 selected_ids.add(c.id)
-
     return sorted(selected, key=lambda c: c.score, reverse=True)
 
 
 def recommend_action(state: SessionState) -> tuple[str, str]:
     active = {c.name: c for c in state.active_concepts}
     if state.conflicts:
-        return "resolve_authoritative_conflict", "Verify the authoritative system state and explain the mismatch before closing the issue."
+        return "resolve_conflict", "Verify the authoritative system state, explain the mismatch, and avoid confirming resolution prematurely."
 
-    # Domain-specific operational actions.
-    if active.get("root_cause"):
-        domain = active.get("customer_domain")
-        d = domain.value if domain else ""
-        cause = active["root_cause"].value
-        if d == "payment":
-            return "explain_payment_decline", f"Explain the payment failure reason and the next valid remediation: {cause}."
-        if d == "delivery":
-            return "trace_or_replace_shipment", f"Use the confirmed delivery cause to trace, replace, or escalate the shipment: {cause}."
-        if d == "internet":
-            return "address_network_cause", f"Address the confirmed network cause instead of repeating generic restarts: {cause}."
-        if d == "account_access":
-            return "restore_account_access", f"Resolve the account-access cause using the appropriate verification/unlock flow: {cause}."
-        if d == "subscription":
-            return "fix_subscription_state", f"Correct the subscription/cancellation state and explain any billing impact: {cause}."
-        if d == "travel":
-            return "rebook_or_offer_alternative", f"Use the booking cause to rebook or offer the next valid alternative: {cause}."
-        if d == "return_refund":
-            return "resolve_refund", f"Resolve the refund/return state based on the confirmed cause: {cause}."
-        if d == "insurance_claim":
-            return "advance_claim", f"Explain what is blocking the claim and the exact next step: {cause}."
-        return "resolve_root_cause", f"Act on the confirmed root cause: {cause}."
-
-    status = active.get("authoritative_status")
-    if status and status.value == "unresolved":
-        domain = active.get("customer_domain")
-        d = domain.value if domain else ""
-        codes = {
-            "payment": ("inspect_payment_failure", "Inspect the payment failure reason before asking for another attempt."),
-            "delivery": ("trace_shipment", "Trace the shipment using carrier/warehouse evidence before promising delivery."),
-            "internet": ("diagnose_network", "Check outage and line/device status before asking for another restart."),
-            "account_access": ("diagnose_access", "Check lock, authentication, and verification state before another password reset."),
-            "subscription": ("inspect_subscription", "Check cancellation and billing state before confirming the subscription is closed."),
-            "travel": ("inspect_booking", "Check authoritative booking status and available alternatives."),
-            "return_refund": ("inspect_refund", "Check return receipt and refund processing state."),
-            "insurance_claim": ("inspect_claim", "Check claim status and outstanding requirements."),
+    root = active.get("root_cause")
+    domain = active.get("customer_domain")
+    if root:
+        d = domain.value if domain else "service"
+        verbs = {
+            "payment": "explain the decline and apply the valid remediation",
+            "delivery": "trace, replace, or escalate the shipment",
+            "internet": "address the network cause instead of repeating router restarts",
+            "account_access": "complete the correct verification or unlock flow",
+            "subscription": "correct cancellation and billing state",
+            "travel": "repair the ticket/booking and protect the itinerary",
+            "return_refund": "restart or escalate the refund workflow",
+            "insurance_claim": "identify the missing requirement and advance the claim",
+            "device_support": "address the device/firmware failure or replace the device if appropriate",
+            "software_saas": "repair the entitlement or permission state",
+            "utilities": "correct the billing ledger using the authoritative meter record",
+            "healthcare_appointment": "verify scheduling and offer the earliest valid appointment",
+            "banking_fraud": "secure the card, explain the dispute state, and progress replacement",
+            "hotel_hospitality": "synchronize the reservation with the property system",
+            "rideshare": "explain and release the authorization hold or escalate it",
+            "event_ticketing": "activate the ticket entitlement before the event",
+            "telecom_mobile": "repair network provisioning for the new plan",
+            "marketplace_dispute": "complete the outstanding remediation or offer the valid remedy",
         }
-        return codes.get(d, ("investigate_unresolved", "Investigate the authoritative unresolved state before repeating troubleshooting."))
+        return "act_on_root_cause", f"Use the confirmed root cause — {root.value} — to {verbs.get(d, 'take the next concrete resolution step')}."
 
     if active.get("avoid_repeat_action"):
-        return "avoid_repetition", "Do not repeat already-completed troubleshooting; choose the next diagnostic or escalation step."
-
-    if status and status.value == "resolved":
-        return "confirm_resolution", "Confirm the authoritative resolution and close with a concise check that the customer is satisfied."
-
-    return "clarify_goal", "Ask one concise question to identify the customer's current goal and issue."
+        return "avoid_repetition", "Do not repeat troubleshooting the customer already completed; move to the next diagnostic step."
+    if active.get("authoritative_status") and active["authoritative_status"].value == "unresolved":
+        return "investigate", "Keep the case open and inspect the authoritative system state before promising resolution."
+    return "clarify", "Ask one focused question that advances the issue without making the customer repeat information."
 
 
 def synthesize_response(state: SessionState) -> str:
-    code = state.recommended_action_code
     active = {c.name: c for c in state.active_concepts}
-    if code == "resolve_authoritative_conflict":
-        auth = active.get("authoritative_status")
-        if auth:
-            return (f"I’m seeing a mismatch: it may look resolved on your side, but our system still shows it as {auth.value}. "
-                    "I won’t close this yet; I’ll verify the authoritative status and take the next step from there.")
-        return "I’m seeing conflicting signals, so I’m going to verify the authoritative status before I give you the next step."
-    if code == "avoid_repetition":
-        return "I can see you already tried that, so I won’t make you repeat it. I’ll move to the next diagnostic step."
-    if code == "confirm_resolution":
-        return "Our system now shows the issue as resolved. Before I close this, can you confirm everything is working correctly on your side?"
-    if active.get("root_cause"):
-        return f"I found what is blocking this: {active['root_cause'].value}. I’ll use that to take the next valid step instead of repeating generic troubleshooting."
-    if active.get("authoritative_status") and active["authoritative_status"].value == "unresolved":
-        return "I can confirm the issue is still unresolved in our system. I’ll check the specific cause and next action rather than asking you to repeat what you’ve already tried."
-    return "I’m here to help. Tell me what happened, and I’ll work through the current state with you."
+    emotion = state.current_emotion or "neutral"
+    prefix = {
+        "angry": "I can see why this is frustrating.",
+        "frustrated": "I can see you've already spent time on this.",
+        "impatient": "I'll keep this focused and avoid repeating steps.",
+        "anxious": "I'll verify the current state so you have a clear answer.",
+        "confused": "The signals you're seeing don't line up, so I'll separate them clearly.",
+        "skeptical": "I won't ask you to rely on the screen alone — I'll use the authoritative system state.",
+        "distressed": "I'll focus on the most immediate next step first.",
+        "disappointed": "I understand why this is disappointing.",
+        "relieved": "Good — we're closer to a confirmed resolution.",
+        "appreciative": "Absolutely.",
+    }.get(emotion, "")
+
+    if state.recommended_action_code == "resolve_conflict":
+        body = "I'm seeing a mismatch between what appears on your side and what the system of record shows. I won't call this resolved yet; I'll verify the authoritative state and work from that."
+    elif state.recommended_action_code == "act_on_root_cause" and active.get("root_cause"):
+        body = f"I found the underlying issue: {active['root_cause'].value}. I'll use that cause to take the next concrete step instead of sending you through generic troubleshooting again."
+    elif state.recommended_action_code == "avoid_repetition":
+        body = "You already completed that troubleshooting, so I won't make you repeat it. I'll move to the next diagnostic step."
+    elif state.recommended_action_code == "investigate":
+        body = "The authoritative system still shows this as unresolved. I'll keep the case open and check the specific blocker before I give you a resolution."
+    else:
+        body = "Tell me the part that matters most right now, and I'll focus on the next useful step."
+    return f"{prefix} {body}".strip()
 
 
 def refresh_state(state: SessionState) -> SessionState:
     state.conflicts = detect_conflicts(state.concepts)
-    state.active_concepts = choose_active(state.concepts, state.config, state.conflicts)
+    state.active_concepts = choose_active(
+        state.concepts,
+        capacity_k=state.config.capacity_k,
+        preserve_conflicts=state.config.preserve_conflicts,
+        conflicts=state.conflicts,
+    )
+    by_name = {c.name: c for c in state.concepts}
+    emotion = by_name.get("customer_emotion")
+    intensity = by_name.get("emotion_intensity")
+    if emotion:
+        state.current_emotion = emotion.value  # type: ignore[assignment]
+    if intensity:
+        try:
+            state.current_emotion_intensity = float(intensity.value)
+        except ValueError:
+            pass
     code, text = recommend_action(state)
     state.recommended_action_code = code
     state.recommended_action = text

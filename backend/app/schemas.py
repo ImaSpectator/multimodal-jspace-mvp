@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Literal, Optional
+
 from pydantic import BaseModel, Field
 
 Modality = Literal["text", "audio", "image", "backend", "derived"]
 ConceptStatus = Literal["supported", "disputed", "unresolved"]
+Emotion = Literal[
+    "calm", "neutral", "curious", "hopeful", "appreciative", "satisfied", "relieved",
+    "uncertain", "confused", "anxious", "disappointed", "frustrated", "angry", "impatient",
+    "skeptical", "distressed", "embarrassed",
+]
 
 
 class Evidence(BaseModel):
@@ -33,11 +39,11 @@ class Concept(BaseModel):
     @property
     def score(self) -> float:
         raw = (
-            0.32 * self.task_relevance
-            + 0.23 * self.confidence
-            + 0.22 * self.conflict_importance
-            + 0.18 * self.recency
-            - 0.05 * self.redundancy
+            0.34 * self.task_relevance
+            + 0.22 * self.confidence
+            + 0.24 * self.conflict_importance
+            + 0.17 * self.recency
+            - 0.03 * self.redundancy
         )
         if self.pinned:
             raw += 1.0
@@ -54,11 +60,12 @@ class Conflict(BaseModel):
 
 class CustomerTurn(BaseModel):
     text: str
-    audio_tone: Optional[Literal["calm", "neutral", "frustrated", "angry", "uncertain"]] = None
+    emotion: Emotion = "neutral"
+    emotion_intensity: float = Field(default=0.5, ge=0.0, le=1.0)
+    nonverbal_cue: Optional[str] = None
 
 
 class BackendEvent(BaseModel):
-    # Open string on purpose: the automated simulator spans many customer-service domains.
     event_type: str
     value: str
     metadata: dict = Field(default_factory=dict)
@@ -74,7 +81,7 @@ class ImageObservation(BaseModel):
 
 
 class SessionConfig(BaseModel):
-    capacity_k: int = Field(default=5, ge=1, le=50)
+    capacity_k: int = Field(default=5, ge=2, le=20)
     preserve_conflicts: bool = True
 
 
@@ -89,18 +96,18 @@ class SessionState(BaseModel):
     recommended_action: Optional[str] = None
     recommended_action_code: Optional[str] = None
     last_response: Optional[str] = None
+    current_emotion: Optional[Emotion] = None
+    current_emotion_intensity: float = 0.0
 
 
 class ScenarioControls(BaseModel):
     domain: str = "random"
-    difficulty: Literal["easy", "medium", "hard"] = "medium"
-    include_conflict: Optional[bool] = None
     seed: Optional[int] = None
 
 
 class ScenarioStep(BaseModel):
     label: str
-    customer_turn: Optional[CustomerTurn] = None
+    customer_turn: CustomerTurn
     backend_events: list[BackendEvent] = Field(default_factory=list)
     image_observations: list[ImageObservation] = Field(default_factory=list)
 
@@ -109,31 +116,16 @@ class GeneratedScenario(BaseModel):
     scenario_id: str
     domain: str
     title: str
-    difficulty: str
     customer_profile: dict
     hidden_ground_truth: dict
-    expected_action_code: str
     expected_conflict: bool
     critical_concepts: list[str]
     steps: list[ScenarioStep]
     seed: int
 
 
-class EvaluationResult(BaseModel):
-    action_correct: bool
-    conflict_expected: bool
-    conflict_detected: bool
-    conflict_correct: bool
-    critical_evidence_retention: float
-    final_active_concepts: list[str]
-    expected_action_code: str
-    actual_action_code: Optional[str]
-    score: float
-    notes: list[str] = Field(default_factory=list)
-
-
-class ScenarioRunResult(BaseModel):
+class ConversationProgress(BaseModel):
     scenario: GeneratedScenario
-    final_state: SessionState
-    step_states: list[SessionState]
-    evaluation: EvaluationResult
+    state: SessionState
+    next_step_index: int = 0
+    finished: bool = False
