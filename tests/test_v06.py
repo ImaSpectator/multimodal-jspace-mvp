@@ -2,10 +2,10 @@ from pathlib import Path
 import sys
 import types
 
-from backend.app.ai_provider import generate_support_reply
-from backend.app.scenario_generator import generate_scenario, list_domains
-from backend.app.schemas import ScenarioControls
-from backend.app.simulator import (
+from backend.jspace_v063.ai_provider import generate_support_reply
+from backend.jspace_v063.scenario_generator import generate_scenario, list_domains
+from backend.jspace_v063.schemas import ScenarioControls
+from backend.jspace_v063.simulator import (
     apply_manual_customer_message,
     append_agent_reply,
     end_manual_session,

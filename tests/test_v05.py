@@ -5,17 +5,17 @@ import types
 
 import pytest
 
-from backend.app.ai_provider import (
+from backend.jspace_v063.ai_provider import (
     DEFAULT_MODEL,
     analyze_media_for_jspace,
     build_support_prompt,
     enhance_scenario_with_gemini,
     generate_support_reply,
 )
-from backend.app.engine import infer_text_emotion
-from backend.app.scenario_generator import EMOTIONS, generate_manual_context, generate_scenario, list_domains
-from backend.app.schemas import ScenarioControls
-from backend.app.simulator import manual_customer_turn, new_manual_state, run_full_scenario
+from backend.jspace_v063.engine import infer_text_emotion
+from backend.jspace_v063.scenario_generator import EMOTIONS, generate_manual_context, generate_scenario, list_domains
+from backend.jspace_v063.schemas import ScenarioControls
+from backend.jspace_v063.simulator import manual_customer_turn, new_manual_state, run_full_scenario
 
 
 DOMAINS = list_domains()
@@ -268,7 +268,7 @@ def test_media_analysis_creates_multimodal_concepts(monkeypatch):
 def test_manual_media_concepts_are_merged():
     profile, events = generate_manual_context("device_support", seed=42)
     state = new_manual_state(capacity_k=8, backend_events=events)
-    from backend.app.schemas import Concept, Evidence
+    from backend.jspace_v063.schemas import Concept, Evidence
     media_concept = Concept(
         id="m1", name="video_evidence_1", value="Device is rebooting repeatedly", sources=["video"],
         evidence=[Evidence(source="video", detail="reboot loop")], confidence=.9, task_relevance=.9,
