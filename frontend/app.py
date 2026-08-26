@@ -15,25 +15,28 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.jspace_v061.ai_provider import (  # noqa: E402
+from backend.jspace_v062.ai_provider import (  # noqa: E402
     DEFAULT_MODEL,
     analyze_media_for_jspace,
     enhance_scenario_with_gemini,
     generate_support_reply,
+    probe_gemini,
+    stream_support_reply,
 )
-from backend.jspace_v061.engine import merge_concepts, refresh_state  # noqa: E402
-from backend.jspace_v061.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
-from backend.jspace_v061.schemas import ImageObservation, ScenarioControls  # noqa: E402
-from backend.jspace_v061.simulator import (  # noqa: E402
+from backend.jspace_v062.engine import merge_concepts, refresh_state  # noqa: E402
+from backend.jspace_v062.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
+from backend.jspace_v062.schemas import ImageObservation, ScenarioControls  # noqa: E402
+from backend.jspace_v062.simulator import (  # noqa: E402
     append_agent_reply,
     apply_manual_customer_message,
     apply_scenario_customer_step,
     end_manual_session,
+    end_scenario_session,
     new_manual_state,
     new_scenario_state,
 )
 
-APP_VERSION = "0.6.1-live-conversation"
+APP_VERSION = "0.6.2-fast-stream"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -175,6 +178,10 @@ a.anchor-link, [data-testid="stMarkdownContainer"] h1 > a, [data-testid="stMarkd
 [data-testid="stFileUploaderDropzone"] { background:rgba(8,17,32,.58); border-color:rgba(93,245,255,.18); }
 hr { border-color:rgba(140,175,215,.12)!important; }
 @media(max-width:1000px){ .j-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.j-node-grid{grid-template-columns:1fr 1fr}.j-title{font-size:1.72rem}.j-msg{max-width:94%} }
+
+.j-top-icon [data-testid="stPopover"] > button, .j-top-icon button { min-height:2.15rem!important; height:2.15rem!important; padding:.25rem .45rem!important; border-radius:11px!important; font-size:1rem!important; }
+#scenario-live-anchor { scroll-margin-top: 20px; }
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -196,6 +203,58 @@ GEMINI_API_KEY = _secret("GEMINI_API_KEY")
 GEMINI_MODEL = _secret("GEMINI_MODEL", DEFAULT_MODEL) or DEFAULT_MODEL
 PUBLIC_APP_URL = _secret("PUBLIC_APP_URL", "") or ""
 AI_CONNECTED = bool(GEMINI_API_KEY)
+
+
+def _init_preferences() -> None:
+    defaults = {
+        "settings_speed": "Fast",
+        "settings_reply": "Concise",
+        "settings_scenario_ai": True,
+        "settings_auto_scroll": True,
+        "generation_epoch": 0,
+    }
+    for key, value in defaults.items():
+        st.session_state.setdefault(key, value)
+
+
+def _ai_runtime() -> dict:
+    speed = st.session_state.get("settings_speed", "Fast")
+    reply = st.session_state.get("settings_reply", "Concise")
+    if speed == "Fast":
+        timeout_ms, attempts, history = 8000, 2, 4
+    else:
+        timeout_ms, attempts, history = 14000, 2, 6
+    if reply == "Concise":
+        output_tokens, sentences = 120, 2
+    else:
+        output_tokens, sentences = 180, 3
+    return {
+        "timeout_ms": timeout_ms,
+        "max_attempts": attempts,
+        "history_turns": history,
+        "max_output_tokens": output_tokens,
+        "reply_sentences": sentences,
+        "scenario_timeout_ms": 9000 if speed == "Fast" else 14000,
+    }
+
+
+def _bump_generation_epoch() -> None:
+    st.session_state.generation_epoch = int(st.session_state.get("generation_epoch", 0)) + 1
+
+
+def _on_main_tab_change() -> None:
+    # Invalidate any UI generation result from the tab the user just left.
+    _bump_generation_epoch()
+
+
+def _scroll_to(element_id: str) -> None:
+    components.html(
+        f"""<script>setTimeout(function(){{const el=window.parent.document.getElementById('{element_id}'); if(el) el.scrollIntoView({{behavior:'smooth',block:'start'}});}},120);</script>""",
+        height=0,
+    )
+
+
+_init_preferences()
 
 
 def display_domain(domain: str) -> str:
@@ -221,38 +280,50 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Custom utility bar replaces Streamlit's non-functional native toolbar for this deployment.
-u1, u2, u3, u4, filler = st.columns([1, 1, 1, 1, 5.8])
+# Compact utility controls in the top-right.
+filler, u1, u2, u3, u4 = st.columns([10.4, .55, .55, .55, .55], gap="small")
 with u1:
-    with st.popover("❔ Help", use_container_width=True):
+    with st.popover("❔", help="Help"):
         st.markdown("**Quick guide**")
-        st.write("Scenario Lab generates a complete controlled case, then reveals it turn by turn. Manual mode lets you play the customer for as long as you want.")
-        st.write("For multimodal experiments, choose **Video + Voice** or **Multimodal Mix** and attach evidence in Manual mode.")
+        st.write("Scenario Lab generates a case and reveals it turn by turn. Manual mode lets you play the customer until you end the session.")
+        st.write("Multimodal Mix is best for testing disagreement between customer statements, media evidence, affect, and company-system data.")
 with u2:
-    with st.popover("↗ Share", use_container_width=True):
-        st.markdown("**Share this experience**")
-        share_url = st.text_input("Public app link", value=PUBLIC_APP_URL, placeholder="Paste your .streamlit.app URL")
-        st.caption("Set `PUBLIC_APP_URL` in Streamlit Secrets if you want this filled automatically.")
-        if share_url:
+    with st.popover("↗", help="Share"):
+        st.markdown("**Email this experience**")
+        share_url = st.text_input("Public app link", value=PUBLIC_APP_URL, placeholder="https://your-app.streamlit.app", key="share_url")
+        recipient = st.text_input("Recipient email", placeholder="name@example.com", key="share_email")
+        if share_url and recipient and "@" in recipient:
             subject = urllib.parse.quote("Try JSpace Live")
-            body = urllib.parse.quote(f"I wanted to share this JSpace customer-service demo with you:\n\n{share_url}")
-            st.link_button("Email invite", f"mailto:?subject={subject}&body={body}", use_container_width=True)
-            st.code(share_url, language=None)
+            body = urllib.parse.quote(f"I wanted to share this JSpace customer-service experience with you:\n\n{share_url}")
+            st.link_button("Email link", f"mailto:{urllib.parse.quote(recipient)}?subject={subject}&body={body}", use_container_width=True)
+            st.caption("This opens your email app with the recipient and website link filled in; you press Send there.")
+        elif recipient and "@" not in recipient:
+            st.caption("Enter a valid email address.")
 with u3:
-    if st.button("↻ Reset", use_container_width=True, help="Clear the current simulated sessions"):
+    if st.button("↻", help="Reset current sessions", key="top_reset"):
+        _bump_generation_epoch()
         reset_sessions()
         st.rerun()
 with u4:
-    with st.popover("⚙ Settings", use_container_width=True):
-        st.caption(f"AI provider: {'connected' if AI_CONNECTED else 'local fallback'}")
-        st.caption(f"Model: {GEMINI_MODEL} (Gemini 3.7 Flash by default)")
-        st.caption("The support prompt uses low thinking and a compact six-message history for lower latency.")
+    with st.popover("⚙", help="Settings"):
+        st.markdown("**Conversation settings**")
+        st.selectbox("AI response profile", ["Fast", "Balanced"], key="settings_speed", help="Fast uses an 8-second Gemini request timeout and compact context. Balanced allows more time/context.")
+        st.selectbox("Agent reply length", ["Concise", "Standard"], key="settings_reply")
+        st.toggle("Use Gemini to vary scenario wording", key="settings_scenario_ai", help="Turn this off for near-instant curated scenario generation.")
+        st.toggle("Auto-jump to conversation after generation", key="settings_auto_scroll")
+        cfg = _ai_runtime()
+        st.caption(f"Gemini timeout: {cfg['timeout_ms']/1000:.0f}s/attempt · history: {cfg['history_turns']} messages")
+        if st.button("Test Gemini connection", use_container_width=True, key="test_gemini"):
+            with st.spinner("Testing…"):
+                ok, detail = probe_gemini(api_key=GEMINI_API_KEY, model=GEMINI_MODEL, timeout_ms=5000)
+            if ok:
+                st.success(f"Connected · {GEMINI_MODEL}")
+            else:
+                st.error(detail)
         components.html(
             """<button onclick="window.parent.print()" style="width:100%;padding:8px 12px;border-radius:10px;border:1px solid #4a7891;background:#0d1b2b;color:#eaf7ff;cursor:pointer">Print this view</button>""",
             height=46,
         )
-with filler:
-    st.markdown('<div class="j-utility">CUSTOM CONTROLS · native Streamlit chrome hidden for a cleaner public demo</div>', unsafe_allow_html=True)
 
 
 def profile_html(profile: dict) -> str:
@@ -388,11 +459,41 @@ def render_conversation(transcript: list[dict], channel_label: str, *, typing: b
 
 def make_responder(channel_label: str, media: list[dict] | None = None):
     def responder(state, profile, domain):
+        cfg = _ai_runtime()
         return generate_support_reply(
             state, profile, domain, api_key=GEMINI_API_KEY, model=GEMINI_MODEL,
             fallback=state.last_response, channel=CHANNELS[channel_label]["slug"], media=media,
+            timeout_ms=cfg["timeout_ms"], max_attempts=cfg["max_attempts"],
+            history_turns=cfg["history_turns"], max_output_tokens=cfg["max_output_tokens"],
+            reply_sentences=cfg["reply_sentences"],
         )
     return responder
+
+
+def stream_agent_reply(state, profile, domain: str, channel_label: str, conversation_slot, *, media=None, epoch: int | None = None):
+    """Stream the support reply into the existing phone UI and return the final text/provider."""
+    cfg = _ai_runtime()
+    final_text, final_provider = state.last_response or "I can help with that.", "Local simulation"
+    got_text = False
+    for partial, provider, done in stream_support_reply(
+        state, profile, domain, api_key=GEMINI_API_KEY, model=GEMINI_MODEL,
+        fallback=state.last_response, channel=CHANNELS[channel_label]["slug"], media=media,
+        timeout_ms=cfg["timeout_ms"], max_attempts=cfg["max_attempts"],
+        history_turns=cfg["history_turns"], max_output_tokens=cfg["max_output_tokens"],
+        reply_sentences=cfg["reply_sentences"],
+    ):
+        if epoch is not None and int(st.session_state.get("generation_epoch", 0)) != epoch:
+            return None, "Canceled"
+        final_text, final_provider = partial, provider
+        if partial:
+            got_text = True
+            preview = state.transcript + [{"role": "agent", "text": partial}]
+            render_conversation(preview, channel_label, slot=conversation_slot)
+        if done:
+            break
+    if not got_text:
+        render_conversation(state.transcript, channel_label, typing=True, slot=conversation_slot)
+    return final_text, final_provider
 
 
 def read_uploaded_media(files) -> tuple[list[dict], list[dict]]:
@@ -494,222 +595,286 @@ def render_start_here(domains: list[str]) -> None:
             st.markdown(f'<div class="j-domain"><strong>{html.escape(display_domain(domain))}</strong><span>{html.escape(DOMAIN_DESCRIPTIONS.get(domain, "Customer-service case."))}</span></div>', unsafe_allow_html=True)
 
 
-def process_scenario_turn(scenario, state, step_index: int, channel_label: str, conversation_slot) -> None:
+def process_scenario_turn(scenario, state, step_index: int, channel_label: str, conversation_slot) -> bool:
+    epoch = int(st.session_state.get("generation_epoch", 0))
     step = scenario.steps[step_index]
     apply_scenario_customer_step(scenario, state, step_index)
-    # Customer message appears before any network call.
+    # Customer message is emitted immediately before the network request starts.
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
     render_conversation(state.transcript, channel_label, typing=True, slot=conversation_slot)
-    reply, provider = make_responder(channel_label)(state, scenario.customer_profile, scenario.domain)
+    reply, provider = stream_agent_reply(
+        state, scenario.customer_profile, scenario.domain, channel_label, conversation_slot, epoch=epoch
+    )
+    if reply is None or int(st.session_state.get("generation_epoch", 0)) != epoch:
+        return False
     append_agent_reply(state, reply, provider, step_label=step.label)
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
+    return True
 
 
-def process_manual_turn(state, profile, domain: str, channel_label: str, prompt: str, media_files, conversation_slot) -> None:
+def process_manual_turn(state, profile, domain: str, channel_label: str, prompt: str, media_files, conversation_slot) -> bool:
+    epoch = int(st.session_state.get("generation_epoch", 0))
     media, media_display = read_uploaded_media(media_files)
     apply_manual_customer_message(
         state, prompt, attachments=media_display, affect_source=CHANNELS[channel_label]["affect_source"]
     )
-    # Show the customer's message immediately, then enrich with media while the agent is typing.
+    # Show the customer's message immediately. Media analysis only runs when the user attached media.
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
     render_conversation(state.transcript, channel_label, typing=True, slot=conversation_slot)
     if media:
-        media_concepts = analyze_media_for_jspace(media, api_key=GEMINI_API_KEY, model=GEMINI_MODEL, domain=domain)
+        cfg = _ai_runtime()
+        media_concepts = analyze_media_for_jspace(
+            media, api_key=GEMINI_API_KEY, model=GEMINI_MODEL, domain=domain,
+            timeout_ms=max(cfg["timeout_ms"], 10000),
+        )
+        if int(st.session_state.get("generation_epoch", 0)) != epoch:
+            return False
         if media_concepts:
             merge_concepts(state.concepts, media_concepts)
             refresh_state(state)
-    reply, provider = make_responder(channel_label, media=media)(state, profile, domain)
+    reply, provider = stream_agent_reply(
+        state, profile, domain, channel_label, conversation_slot, media=media, epoch=epoch
+    )
+    if reply is None or int(st.session_state.get("generation_epoch", 0)) != epoch:
+        return False
     append_agent_reply(state, reply, provider)
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
+    return True
 
 
 domains = list_domains()
-start_tab, scenario_tab, manual_tab = st.tabs(["◎ Start Here", "✦ Scenario Lab", "◈ Manual Multimodal AI"])
+start_tab, scenario_tab, manual_tab = st.tabs(
+    ["◎ Start Here", "✦ Scenario Lab", "◈ Manual Multimodal AI"],
+    on_change=_on_main_tab_change,
+    key="main_tabs",
+)
 
-with start_tab:
-    render_start_here(domains)
+if start_tab.open:
+    with start_tab:
+        render_start_here(domains)
 
-with scenario_tab:
-    st.markdown("## Scenario Lab")
-    control1, control2, control3 = st.columns([1.25, 1, 1])
-    with control1:
-        domain_label = st.selectbox("Domain", ["Random"] + [display_domain(d) for d in domains], key="scenario_domain")
-        scenario_domain = "random" if domain_label == "Random" else domain_label.lower().replace(" ", "_")
-        if scenario_domain != "random":
-            st.caption(DOMAIN_DESCRIPTIONS.get(scenario_domain, ""))
-    with control2:
-        channel_label = st.selectbox("Conversation channel", list(CHANNELS), index=0, key="scenario_channel")
-        st.caption(CHANNELS[channel_label]["hint"])
-    with control3:
-        scenario_k = st.slider("JSpace capacity K", 3, 6, 4, key="scenario_k")
-        seed_text = st.text_input("Optional seed", placeholder="blank = new case", key="scenario_seed")
-        seed = int(seed_text) if seed_text.strip().isdigit() else None
+if scenario_tab.open:
+    with scenario_tab:
+        st.markdown("## Scenario Lab")
+        control1, control2, control3 = st.columns([1.25, 1, 1])
+        with control1:
+            domain_label = st.selectbox("Domain", ["Random"] + [display_domain(d) for d in domains], key="scenario_domain")
+            scenario_domain = "random" if domain_label == "Random" else domain_label.lower().replace(" ", "_")
+            if scenario_domain != "random":
+                st.caption(DOMAIN_DESCRIPTIONS.get(scenario_domain, ""))
+        with control2:
+            channel_label = st.selectbox("Conversation channel", list(CHANNELS), index=0, key="scenario_channel")
+            st.caption(CHANNELS[channel_label]["hint"])
+        with control3:
+            scenario_k = st.slider("JSpace capacity K", 3, 6, 4, key="scenario_k")
+            seed_text = st.text_input("Optional seed", placeholder="blank = new case", key="scenario_seed")
+            seed = int(seed_text) if seed_text.strip().isdigit() else None
 
-    if st.button("Generate scenario", type="primary", use_container_width=True, key="generate_scenario"):
-        with st.spinner("Building a realistic customer case…"):
-            scenario = generate_scenario(ScenarioControls(domain=scenario_domain, seed=seed))
-            scenario, scenario_provider = enhance_scenario_with_gemini(
-                scenario, api_key=GEMINI_API_KEY, model=GEMINI_MODEL, channel=CHANNELS[channel_label]["slug"]
+        if st.button("Generate scenario", type="primary", use_container_width=True, key="generate_scenario"):
+            _bump_generation_epoch()
+            epoch = int(st.session_state.generation_epoch)
+            with st.spinner("Building a customer case…"):
+                scenario = generate_scenario(ScenarioControls(domain=scenario_domain, seed=seed))
+                scenario_provider = "Curated scenario · instant"
+                if AI_CONNECTED and st.session_state.get("settings_scenario_ai", True):
+                    cfg = _ai_runtime()
+                    scenario, scenario_provider = enhance_scenario_with_gemini(
+                        scenario,
+                        api_key=GEMINI_API_KEY,
+                        model=GEMINI_MODEL,
+                        channel=CHANNELS[channel_label]["slug"],
+                        timeout_ms=cfg["scenario_timeout_ms"],
+                    )
+                scenario = prepare_scenario_for_channel(scenario, channel_label)
+            if int(st.session_state.get("generation_epoch", 0)) == epoch:
+                st.session_state.live_scenario = scenario
+                st.session_state.live_state = new_scenario_state(scenario, capacity_k=scenario_k)
+                st.session_state.live_next_step = 0
+                st.session_state.live_started = False
+                st.session_state.live_channel = channel_label
+                st.session_state.live_scenario_provider = scenario_provider
+                st.session_state.live_user_ended = False
+                st.session_state.scenario_scroll_pending = True
+                st.rerun()
+
+        scenario = st.session_state.get("live_scenario")
+        state = st.session_state.get("live_state")
+        next_step = st.session_state.get("live_next_step", 0)
+        live_channel = st.session_state.get("live_channel", channel_label)
+
+        if not scenario or not state:
+            st.info("Generate a scenario first. The case brief will appear here, then you can start the live conversation.")
+        else:
+            st.markdown('<div id="scenario-live-anchor"></div>', unsafe_allow_html=True)
+            if st.session_state.pop("scenario_scroll_pending", False) and st.session_state.get("settings_auto_scroll", True):
+                _scroll_to("scenario-live-anchor")
+
+            st.markdown(
+                f'''<div class="j-card j-case"><div class="j-card-title">CASE BRIEF · {html.escape(display_domain(scenario.domain))}</div><div class="j-card-value">{html.escape(scenario.title)}</div><div class="j-card-meta">{html.escape(scenario.problem_summary or scenario.steps[0].customer_turn.text)} · {html.escape(CHANNELS[live_channel]['hint'])}</div></div>''',
+                unsafe_allow_html=True,
             )
-            scenario = prepare_scenario_for_channel(scenario, channel_label)
-        st.session_state.live_scenario = scenario
-        st.session_state.live_state = new_scenario_state(scenario, capacity_k=scenario_k)
-        st.session_state.live_next_step = 0
-        st.session_state.live_started = False
-        st.session_state.live_channel = channel_label
-        st.session_state.live_scenario_provider = scenario_provider
-        st.rerun()
+            render_profile(scenario.customer_profile, state)
 
-    scenario = st.session_state.get("live_scenario")
-    state = st.session_state.get("live_state")
-    next_step = st.session_state.get("live_next_step", 0)
-    live_channel = st.session_state.get("live_channel", channel_label)
+            chat_col, workspace_col = st.columns([1.14, .86], gap="large")
+            with chat_col:
+                conversation_slot = st.empty()
+                render_conversation(state.transcript, live_channel, slot=conversation_slot)
 
-    if not scenario or not state:
-        st.info("Generate a scenario first. The case brief appears immediately; the customer will not speak until you start the conversation.")
-    else:
-        st.markdown(
-            f'''<div class="j-card j-case"><div class="j-card-title">CASE BRIEF · {html.escape(display_domain(scenario.domain))}</div><div class="j-card-value">{html.escape(scenario.title)}</div><div class="j-card-meta">{html.escape(scenario.problem_summary or scenario.steps[0].customer_turn.text)} · {html.escape(CHANNELS[live_channel]['hint'])}</div></div>''',
-            unsafe_allow_html=True,
-        )
-        render_profile(scenario.customer_profile, state)
+                if not st.session_state.get("live_started", False) and not state.session_ended:
+                    start_c, end_c = st.columns([3, 1])
+                    if start_c.button("Start conversation ▶", type="primary", use_container_width=True, key="start_live"):
+                        st.session_state.live_started = True
+                        ok = process_scenario_turn(scenario, state, 0, live_channel, conversation_slot)
+                        if ok:
+                            st.session_state.live_next_step = 1
+                            st.session_state.live_state = state
+                        st.rerun()
+                    if end_c.button("End session", use_container_width=True, key="end_scenario_before_start"):
+                        _bump_generation_epoch()
+                        end_scenario_session(state)
+                        st.session_state.live_user_ended = True
+                        st.session_state.live_state = state
+                        st.rerun()
+                elif not state.session_ended and next_step < len(scenario.steps):
+                    next_c, end_c = st.columns([3, 1])
+                    if next_c.button("Continue conversation →", type="primary", use_container_width=True, key=f"continue_scenario_{next_step}"):
+                        ok = process_scenario_turn(scenario, state, next_step, live_channel, conversation_slot)
+                        if ok:
+                            st.session_state.live_next_step = next_step + 1
+                            st.session_state.live_state = state
+                        st.rerun()
+                    if end_c.button("End session", use_container_width=True, key=f"end_scenario_{next_step}"):
+                        _bump_generation_epoch()
+                        end_scenario_session(state)
+                        st.session_state.live_user_ended = True
+                        st.session_state.live_state = state
+                        st.rerun()
+                elif state.session_ended:
+                    if st.session_state.get("live_user_ended", False):
+                        st.info("Practice session ended by the user. The app does not claim that the unresolved case was resolved.")
+                    else:
+                        st.success("Conversation closed naturally after confirmed resolution and the customer's final check-in.")
 
-        chat_col, workspace_col = st.columns([1.14, .86], gap="large")
-        with chat_col:
-            conversation_slot = st.empty()
-            render_conversation(state.transcript, live_channel, slot=conversation_slot)
-            if not st.session_state.get("live_started", False):
-                if st.button("Start conversation ▶", type="primary", use_container_width=True, key="start_live"):
-                    st.session_state.live_started = True
-                    process_scenario_turn(scenario, state, 0, live_channel, conversation_slot)
-                    st.session_state.live_next_step = 1
-                    st.session_state.live_state = state
-                    st.rerun()
-            elif not state.session_ended and next_step < len(scenario.steps):
-                if st.button("Continue conversation →", type="primary", use_container_width=True, key=f"continue_scenario_{next_step}"):
-                    process_scenario_turn(scenario, state, next_step, live_channel, conversation_slot)
-                    st.session_state.live_next_step = next_step + 1
-                    st.session_state.live_state = state
-                    st.rerun()
-            elif state.session_ended:
-                st.success("Conversation closed naturally after confirmed resolution and the customer's final check-in.")
-        with workspace_col:
-            render_workspace(state, show_coaching=True)
+            with workspace_col:
+                render_workspace(state, show_coaching=True)
 
-        with st.expander("Researcher view · scenario ground truth", expanded=False):
-            st.write("**Domain:**", display_domain(scenario.domain))
-            st.write("**Problem summary:**", scenario.problem_summary)
-            st.write("**Random conflict present:**", scenario.expected_conflict)
-            st.write("**Hidden ground truth:**", scenario.hidden_ground_truth)
-            st.write("**Scenario language source:**", st.session_state.get("live_scenario_provider", "Curated scenario"))
-            st.write("**Seed:**", scenario.seed)
-            st.write("**Planned customer turns:**", len(scenario.steps))
-            providers = [r.get("provider") for r in state.transcript if r.get("role") == "agent"]
-            st.write("**Agent providers:**", providers)
+            with st.expander("Researcher view · scenario ground truth", expanded=False):
+                st.write("**Domain:**", display_domain(scenario.domain))
+                st.write("**Problem summary:**", scenario.problem_summary)
+                st.write("**Random conflict present:**", scenario.expected_conflict)
+                st.write("**Hidden ground truth:**", scenario.hidden_ground_truth)
+                st.write("**Scenario language source:**", st.session_state.get("live_scenario_provider", "Curated scenario"))
+                st.write("**Seed:**", scenario.seed)
+                st.write("**Planned customer turns:**", len(scenario.steps))
+                providers = [r.get("provider") for r in state.transcript if r.get("role") == "agent"]
+                st.write("**Agent providers:**", providers)
 
-with manual_tab:
-    st.markdown("## Manual Multimodal AI")
-    m1, m2, m3 = st.columns([1.25, 1, 1])
-    with m1:
-        manual_domain_label = st.selectbox("Domain", [display_domain(d) for d in domains], key="manual_domain")
-        manual_domain = manual_domain_label.lower().replace(" ", "_")
-        st.caption(DOMAIN_DESCRIPTIONS.get(manual_domain, ""))
-    with m2:
-        manual_channel = st.selectbox("Channel", list(CHANNELS), index=3, key="manual_channel")
-        st.caption(CHANNELS[manual_channel]["hint"])
-    with m3:
-        manual_k = st.slider("JSpace capacity K", 3, 6, 4, key="manual_k")
-        start_manual = st.button("Start / reset session", type="primary", use_container_width=True)
+if manual_tab.open:
+    with manual_tab:
+        st.markdown("## Manual Multimodal AI")
+        m1, m2, m3 = st.columns([1.25, 1, 1])
+        with m1:
+            manual_domain_label = st.selectbox("Domain", [display_domain(d) for d in domains], key="manual_domain")
+            manual_domain = manual_domain_label.lower().replace(" ", "_")
+            st.caption(DOMAIN_DESCRIPTIONS.get(manual_domain, ""))
+        with m2:
+            manual_channel = st.selectbox("Channel", list(CHANNELS), index=3, key="manual_channel")
+            st.caption(CHANNELS[manual_channel]["hint"])
+        with m3:
+            manual_k = st.slider("JSpace capacity K", 3, 6, 4, key="manual_k")
+            start_manual = st.button("Start / reset session", type="primary", use_container_width=True)
 
-    if start_manual:
-        profile, backend_events = generate_manual_context(manual_domain)
-        st.session_state.manual_state_v06 = new_manual_state(capacity_k=manual_k, backend_events=backend_events, profile=profile)
-        st.session_state.manual_profile_v06 = profile
-        st.session_state.manual_domain_v06 = manual_domain
-        st.session_state.manual_channel_v06 = manual_channel
-        st.session_state.manual_media_key = st.session_state.get("manual_media_key", 0) + 1
-        st.rerun()
+        if start_manual:
+            _bump_generation_epoch()
+            profile, backend_events = generate_manual_context(manual_domain)
+            st.session_state.manual_state_v06 = new_manual_state(capacity_k=manual_k, backend_events=backend_events, profile=profile)
+            st.session_state.manual_profile_v06 = profile
+            st.session_state.manual_domain_v06 = manual_domain
+            st.session_state.manual_channel_v06 = manual_channel
+            st.session_state.manual_media_key = st.session_state.get("manual_media_key", 0) + 1
+            st.rerun()
 
-    manual_state = st.session_state.get("manual_state_v06")
-    manual_profile = st.session_state.get("manual_profile_v06")
-    active_manual_domain = st.session_state.get("manual_domain_v06", manual_domain)
-    active_manual_channel = st.session_state.get("manual_channel_v06", manual_channel)
+        manual_state = st.session_state.get("manual_state_v06")
+        manual_profile = st.session_state.get("manual_profile_v06")
+        active_manual_domain = st.session_state.get("manual_domain_v06", manual_domain)
+        active_manual_channel = st.session_state.get("manual_channel_v06", manual_channel)
 
-    if manual_state and manual_profile:
-        st.markdown(
-            f'''<div class="j-card j-case"><div class="j-card-title">PRACTICE CASE · {html.escape(display_domain(active_manual_domain))}</div><div class="j-card-value">You are the customer. Continue for as many turns as needed.</div><div class="j-card-meta">The company record is simulated automatically. In multimodal channels you can attach media that may support or contradict what you say.</div></div>''',
-            unsafe_allow_html=True,
-        )
-        render_profile(manual_profile, manual_state)
+        if manual_state and manual_profile:
+            st.markdown(
+                f'''<div class="j-card j-case"><div class="j-card-title">PRACTICE CASE · {html.escape(display_domain(active_manual_domain))}</div><div class="j-card-value">You are the customer. Continue for as many turns as needed.</div><div class="j-card-meta">The company record is simulated automatically. In multimodal channels you can attach media that may support or contradict what you say.</div></div>''',
+                unsafe_allow_html=True,
+            )
+            render_profile(manual_profile, manual_state)
 
-        chat_col, workspace_col = st.columns([1.14, .86], gap="large")
-        with chat_col:
-            conversation_slot = st.empty()
-            render_conversation(manual_state.transcript, active_manual_channel, slot=conversation_slot)
+            chat_col, workspace_col = st.columns([1.14, .86], gap="large")
+            with chat_col:
+                conversation_slot = st.empty()
+                render_conversation(manual_state.transcript, active_manual_channel, slot=conversation_slot)
 
-            if not manual_state.session_ended:
-                suggestion = suggested_customer_prompt(active_manual_domain, manual_state)
-                st.markdown(f'<div class="j-suggest">Suggested customer prompt: {html.escape(suggestion)}</div>', unsafe_allow_html=True)
-                if st.button("Use suggested prompt", key="use_manual_suggestion"):
-                    st.session_state.manual_prefill = suggestion
-                    st.rerun()
+                if not manual_state.session_ended:
+                    suggestion = suggested_customer_prompt(active_manual_domain, manual_state)
+                    st.markdown(f'<div class="j-suggest">Suggested customer prompt: {html.escape(suggestion)}</div>', unsafe_allow_html=True)
+                    if st.button("Use suggested prompt", key="use_manual_suggestion"):
+                        st.session_state.manual_prefill = suggestion
+                        st.rerun()
 
-                media_types = {
-                    "Text Messages": ["png", "jpg", "jpeg", "webp"],
-                    "Voice Call": ["mp3", "wav", "m4a", "ogg"],
-                    "Video + Voice": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "webm"],
-                    "Multimodal Mix": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "webm"],
-                }
-                media_files = st.file_uploader(
-                    "Attach evidence for this turn (optional)",
-                    type=media_types[active_manual_channel], accept_multiple_files=True,
-                    key=f"manual_media_{st.session_state.get('manual_media_key', 0)}",
-                    help="Use screenshots, audio or video to add a second/third source of evidence. Multimodal modes are designed to expose agreement and conflict across signals.",
-                )
-                if media_files:
-                    st.caption("Attached: " + ", ".join(f.name for f in media_files))
-
-                prefill = st.session_state.pop("manual_prefill", "") if "manual_prefill" in st.session_state else ""
-                input_label = "Type the customer's text message" if active_manual_channel == "Text Messages" else "Type what the customer says"
-                with st.form("manual_turn_form", clear_on_submit=True):
-                    prompt = st.text_area(
-                        input_label,
-                        value=prefill,
-                        height=92,
-                        placeholder=suggestion,
-                        help="Your message appears immediately in the conversation before the support agent begins generating its reply.",
+                    media_types = {
+                        "Text Messages": ["png", "jpg", "jpeg", "webp"],
+                        "Voice Call": ["mp3", "wav", "m4a", "ogg"],
+                        "Video + Voice": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "webm"],
+                        "Multimodal Mix": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "webm"],
+                    }
+                    media_files = st.file_uploader(
+                        "Attach evidence for this turn (optional)",
+                        type=media_types[active_manual_channel], accept_multiple_files=True,
+                        key=f"manual_media_{st.session_state.get('manual_media_key', 0)}",
+                        help="Use screenshots, audio or video to add another source of evidence. Multimodal modes are designed to expose agreement and conflict across signals.",
                     )
-                    send_col, end_col = st.columns([3, 1])
-                    send = send_col.form_submit_button("Send message", type="primary", use_container_width=True)
-                    end_now = end_col.form_submit_button("End session", use_container_width=True)
+                    if media_files:
+                        st.caption("Attached: " + ", ".join(f.name for f in media_files))
 
-                if send and prompt.strip():
-                    process_manual_turn(
-                        manual_state, manual_profile, active_manual_domain, active_manual_channel,
-                        prompt.strip(), media_files, conversation_slot,
-                    )
-                    st.session_state.manual_state_v06 = manual_state
-                    st.session_state.manual_media_key = st.session_state.get("manual_media_key", 0) + 1
-                    st.rerun()
-                if end_now:
-                    end_manual_session(manual_state)
-                    st.session_state.manual_state_v06 = manual_state
-                    st.rerun()
-            else:
-                st.success("Session ended. Start/reset a session whenever you want to practice another conversation.")
-        with workspace_col:
-            # Manual users get the customer-facing suggested prompt on the left rather than an internal coaching card here.
-            render_workspace(manual_state, show_coaching=False)
+                    prefill = st.session_state.pop("manual_prefill", "") if "manual_prefill" in st.session_state else ""
+                    input_label = "Type the customer's text message" if active_manual_channel == "Text Messages" else "Type what the customer says"
+                    with st.form("manual_turn_form", clear_on_submit=True):
+                        prompt = st.text_area(
+                            input_label,
+                            value=prefill,
+                            height=92,
+                            placeholder=suggestion,
+                            help="Your message appears immediately before the support agent starts generating its reply.",
+                        )
+                        send_col, end_col = st.columns([3, 1])
+                        send = send_col.form_submit_button("Send message", type="primary", use_container_width=True)
+                        end_now = end_col.form_submit_button("End session", use_container_width=True)
 
-        with st.expander("Researcher view · simulated company context", expanded=False):
-            st.write("**Domain:**", display_domain(active_manual_domain))
-            st.write("**Channel:**", active_manual_channel)
-            st.write("**Company-system events:**", manual_state.backend_history)
-            st.write("**AI connected:**", AI_CONNECTED)
-            st.write("**Model:**", GEMINI_MODEL)
-            st.write("**Agent providers:**", [r.get("provider") for r in manual_state.transcript if r.get("role") == "agent"])
-    else:
-        st.info("Choose a domain/channel and start a session. Multimodal Mix gives the richest demonstration of conflicting evidence across modalities.")
+                    if send and prompt.strip():
+                        ok = process_manual_turn(
+                            manual_state, manual_profile, active_manual_domain, active_manual_channel,
+                            prompt.strip(), media_files, conversation_slot,
+                        )
+                        if ok:
+                            st.session_state.manual_state_v06 = manual_state
+                            st.session_state.manual_media_key = st.session_state.get("manual_media_key", 0) + 1
+                        st.rerun()
+                    if end_now:
+                        _bump_generation_epoch()
+                        end_manual_session(manual_state)
+                        st.session_state.manual_state_v06 = manual_state
+                        st.rerun()
+                else:
+                    st.success("Session ended. Start/reset a session whenever you want to practice another conversation.")
+            with workspace_col:
+                render_workspace(manual_state, show_coaching=False)
+
+            with st.expander("Researcher view · simulated company context", expanded=False):
+                st.write("**Domain:**", display_domain(active_manual_domain))
+                st.write("**Channel:**", active_manual_channel)
+                st.write("**Company-system events:**", manual_state.backend_history)
+                st.write("**AI connected:**", AI_CONNECTED)
+                st.write("**Model:**", GEMINI_MODEL)
+                st.write("**Agent providers:**", [r.get("provider") for r in manual_state.transcript if r.get("role") == "agent"])
+        else:
+            st.info("Choose a domain/channel and start a session. Multimodal Mix gives the richest demonstration of conflicting evidence across modalities.")
 
 st.markdown("---")
 st.caption("JSpace Live · capacity-limited, conflict-aware multimodal customer-service research experience")

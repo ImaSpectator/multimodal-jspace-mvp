@@ -286,7 +286,7 @@ def test_frontend_has_requested_experience_changes():
     required = [
         "Start Here", "Scenario Lab", "Manual Multimodal AI", "Text Messages", "Voice Call",
         "Video + Voice", "Multimodal Mix", "Start conversation", "Recommended next move",
-        'expanded=False', "GEMINI_API_KEY", "Gemini 3.7 Flash", "Customer affect",
+        'expanded=False', "GEMINI_API_KEY", "GEMINI_MODEL", "Customer affect",
     ]
     for text in required:
         assert text in source

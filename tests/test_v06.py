@@ -116,9 +116,9 @@ def test_frontend_contains_v06_interaction_requirements():
     source = Path("frontend/app.py").read_text(encoding="utf-8")
     required = [
         "Support Agent is typing", "Suggested customer prompt", "End session", "Satisfaction",
-        "PUBLIC_APP_URL", "Email invite", "Print this view", "expanded=False",
+        "PUBLIC_APP_URL", "Email link", "Print this view", "expanded=False",
         "JSpace capacity K\", 3, 6, 4", "prepare_scenario_for_channel", "Multimodal Mix",
-        "Customer messages", "native Streamlit chrome hidden", "Start conversation",
+        "Customer messages", "on_change=_on_main_tab_change", "Start conversation",
     ]
     for term in required:
         assert term in source

@@ -1,24 +1,24 @@
-# JSpace Live — Multimodal Customer Service v0.6
+# JSpace Live — Multimodal Customer Service v0.6.2
 
 A single-service Streamlit research experience for capacity-limited, conflict-aware multimodal customer-service reasoning.
 
-## Highlights in v0.6
+## What changed in v0.6.2
 
-- Scenario and Manual conversations now show the **customer message immediately**, then display **“Support Agent is typing…”** while the AI call is running.
-- Gemini calls retry transient service errors before using the local recovery responder.
-- Scenario conversations vary in length and do not close while the simulated system-of-record is unresolved.
-- Every Scenario Lab case progresses through confirmed resolution, an “anything else?” check, a customer “no other concerns” turn, and a final goodbye.
-- Manual mode stays open for unlimited turns until the user presses **End session**.
-- Manual input sits directly below the live conversation and includes a context-aware **Suggested customer prompt**.
-- Added dynamic **Satisfaction** alongside Patience and Trust.
-- JSpace K is now intentionally compact: **3–6 concepts**, default 4.
-- Text, Voice, Video + Voice, and Multimodal Mix now have different evidence behavior.
-- Multimodal modes add visual/audio affect evidence that can support or contradict customer wording and backend state.
-- Evidence & provenance and Researcher View are closed by default again.
-- Removed the native Streamlit toolbar and replaced it with purpose-built Help, Share, Reset, Settings and Print controls.
-- Removed visible provider/model labels from the customer conversation. Provider diagnostics remain in Researcher View.
-- Primary actions use a cyan/blue/violet visual system rather than the previous orange accent.
-- The product is now labeled **JSpace Live**, not “MVP” in the UI.
+- Gemini support replies now **stream progressively** instead of waiting for the entire answer before rendering.
+- Gemini requests have an explicit bounded timeout; Fast mode uses an 8-second timeout per attempt and compact context.
+- The Gemini client is reused across turns so the app does not create a fresh HTTP client every message.
+- Gemini 3.7 Flash stays on `thinking_level="low"`; extra sampling parameters were removed from the live reply path.
+- Scenario generation has its own bounded timeout and can be switched to instant curated wording in Settings.
+- After generating a scenario, the app can automatically scroll to the case/conversation area.
+- Help / Share / Reset / Settings are compact controls on the top-right.
+- Settings now control AI speed profile, reply length, AI scenario wording, auto-scroll, Gemini connection testing, and printing.
+- Main tabs use Streamlit dynamic tabs so hidden tabs do not execute expensive content. Switching tabs invalidates the old generation result.
+- Scenario Lab now has an explicit **End session** button.
+- Share accepts a recipient email and opens a pre-addressed email containing the public app URL.
+
+## Important note about tab cancellation
+
+Switching tabs triggers a Streamlit rerun, invalidates the old generation result, and prevents hidden-tab work from continuing in the UI. A network request already sent to Gemini may still finish remotely, but Fast mode caps each request so it cannot leave the UI waiting for minutes.
 
 ## Gemini setup
 
@@ -33,9 +33,7 @@ In **Streamlit → App settings → Secrets**:
 ```toml
 GEMINI_API_KEY = "your-google-ai-studio-api-key"
 GEMINI_MODEL = "gemini-3.7-flash"
-
-# Optional: fills the custom Share control automatically.
-PUBLIC_APP_URL = "https://your-app.streamlit.app"
+PUBLIC_APP_URL = "https://your-app.streamlit.app" # optional, used by Share
 ```
 
 Never commit a real API key to GitHub.
@@ -50,59 +48,43 @@ python -m pip install -r requirements-dev.txt
 python -m streamlit run frontend/app.py --server.port 8501
 ```
 
-Open `http://localhost:8501`.
+This version requires Streamlit 1.62+ because it uses dynamic/lazy tabs.
 
-## Conversation lifecycle
+## Speed profiles
 
-```text
-Customer signal
-   ↓ appears immediately
-JSpace update / evidence merge
-   ↓
-Support Agent is typing…
-   ↓
-Gemini reply (with transient retry)
-   ↓
-Satisfaction + JSpace update
-   ↓
-continue until resolved
-   ↓
-agent asks if there are other concerns
-   ↓
-customer says no
-   ↓
-polite goodbye / session ended
-```
+### Fast (default)
+- 8-second Gemini timeout per attempt
+- at most 2 bounded attempts
+- last 4 messages in the prompt
+- concise 1–2 sentence replies
+- streaming output
 
-## Channel behavior
+### Balanced
+- 14-second timeout per attempt
+- last 6 messages
+- slightly longer answers
 
-- **Text Messages** — text affect is primary; screenshots can still be attached in Manual mode.
-- **Voice Call** — vocal affect is treated as evidence; visual scenario evidence is suppressed.
-- **Video + Voice** — vocal/visible affect plus live visual context can enter JSpace.
-- **Multimodal Mix** — text/voice, visual/media, and company evidence can all compete in the shared workspace.
+If the free Gemini tier is overloaded, latency can still vary. The app now fails over quickly instead of waiting for several minutes.
 
 ## Testing
 
-The v0.6 source includes regression and interaction tests covering:
+The packaged build passed:
 
-- 18 domains
-- variable conversation length
-- explicit resolved/closing lifecycle
-- transient Gemini retry recovery
-- satisfaction updates
-- manual End Session
-- compact capacity limits
-- conflict surfacing and later resolution
-- UI controls and removal of obsolete features
+- 94 unit/regression/integration tests
+- 18 domains × 100 seeds × K=3/4/5/6 = 7,200 full scenario runs
+- 0 state/capacity/resolution failures
+- Python compilation across frontend, runtime, and tests
 
-The packaged build was stress-tested across 7,200 full scenario runs (18 domains × 100 seeds × K=3/4/5/6) with zero state/capacity/closure failures.
+## Deployment integrity
 
-## v0.6.1 deployment integrity fix
+The Streamlit frontend imports from the versioned runtime:
 
-The Streamlit frontend now imports its runtime from `backend/jspace_v061/` rather than the legacy `backend/app/` path. This prevents a partially updated GitHub repository from combining a new frontend with older backend modules. The old `backend/app/` files remain for compatibility/tests but are not used by the deployed Streamlit UI.
+```text
+backend/jspace_v062/
+```
 
-If upgrading from v0.6 or earlier, make sure the entire new `backend/jspace_v061/` folder is committed along with `frontend/app.py`.
+When upgrading, commit both `frontend/app.py` and the entire new `backend/jspace_v062/` directory. Legacy `backend/app/` and older versioned runtimes may remain for compatibility, but the live frontend does not use them.
 
-### Render is no longer used
+## Render
 
-This is a single-service Streamlit application. If an old Render Web Service is still connected to the GitHub repository, Render may continue attempting deployments and sending failure notifications. Disable Auto-Deploy, suspend, or delete that old Render service. No Render URL or FastAPI service is required by this version.
+Render is not used. This remains a single-service Streamlit app.
