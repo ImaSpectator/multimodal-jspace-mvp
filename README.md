@@ -96,3 +96,13 @@ The v0.6 source includes regression and interaction tests covering:
 - UI controls and removal of obsolete features
 
 The packaged build was stress-tested across 7,200 full scenario runs (18 domains × 100 seeds × K=3/4/5/6) with zero state/capacity/closure failures.
+
+## v0.6.1 deployment integrity fix
+
+The Streamlit frontend now imports its runtime from `backend/jspace_v061/` rather than the legacy `backend/app/` path. This prevents a partially updated GitHub repository from combining a new frontend with older backend modules. The old `backend/app/` files remain for compatibility/tests but are not used by the deployed Streamlit UI.
+
+If upgrading from v0.6 or earlier, make sure the entire new `backend/jspace_v061/` folder is committed along with `frontend/app.py`.
+
+### Render is no longer used
+
+This is a single-service Streamlit application. If an old Render Web Service is still connected to the GitHub repository, Render may continue attempting deployments and sending failure notifications. Disable Auto-Deploy, suspend, or delete that old Render service. No Render URL or FastAPI service is required by this version.

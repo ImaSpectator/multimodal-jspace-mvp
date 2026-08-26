@@ -15,16 +15,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.app.ai_provider import (  # noqa: E402
+from backend.jspace_v061.ai_provider import (  # noqa: E402
     DEFAULT_MODEL,
     analyze_media_for_jspace,
     enhance_scenario_with_gemini,
     generate_support_reply,
 )
-from backend.app.engine import merge_concepts, refresh_state  # noqa: E402
-from backend.app.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
-from backend.app.schemas import ImageObservation, ScenarioControls  # noqa: E402
-from backend.app.simulator import (  # noqa: E402
+from backend.jspace_v061.engine import merge_concepts, refresh_state  # noqa: E402
+from backend.jspace_v061.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
+from backend.jspace_v061.schemas import ImageObservation, ScenarioControls  # noqa: E402
+from backend.jspace_v061.simulator import (  # noqa: E402
     append_agent_reply,
     apply_manual_customer_message,
     apply_scenario_customer_step,
@@ -33,7 +33,7 @@ from backend.app.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.6.0-live-conversation"
+APP_VERSION = "0.6.1-live-conversation"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
