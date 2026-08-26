@@ -13,7 +13,7 @@ from .engine import (
     merge_concepts,
     refresh_state,
 )
-from .schemas import BackendEvent, CustomerTurn, GeneratedScenario, SessionConfig, SessionState
+from .schemas import BackendEvent, Concept, CustomerTurn, GeneratedScenario, SessionConfig, SessionState
 
 Responder = Callable[[SessionState, dict, str], tuple[str, str]]
 
@@ -99,9 +99,11 @@ def manual_customer_turn(
     profile: dict,
     domain: str,
     responder: Responder | None = None,
+    media_concepts: list[Concept] | None = None,
+    attachments: list[dict] | None = None,
 ) -> SessionState:
     emotion, intensity = infer_text_emotion(text)
-    turn = CustomerTurn(text=text, emotion=emotion, emotion_intensity=intensity, nonverbal_cue="inferred from typed message")
+    turn = CustomerTurn(text=text, emotion=emotion, emotion_intensity=intensity, nonverbal_cue="inferred from typed message", affect_source="text")
     decay_recency(state.concepts)
     state.transcript.append({
         "role": "customer",
@@ -109,8 +111,11 @@ def manual_customer_turn(
         "emotion": emotion,
         "emotion_intensity": intensity,
         "nonverbal_cue": "text-derived affect",
+        "attachments": attachments or [],
     })
     merge_concepts(state.concepts, extract_from_turn(turn))
+    if media_concepts:
+        merge_concepts(state.concepts, media_concepts)
     refresh_state(state)
     if responder:
         reply, provider = responder(state, profile, domain)

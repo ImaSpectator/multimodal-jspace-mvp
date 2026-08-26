@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-Modality = Literal["text", "audio", "image", "backend", "derived"]
+Modality = Literal["text", "audio", "image", "video", "backend", "derived"]
 ConceptStatus = Literal["supported", "disputed", "unresolved"]
 Emotion = Literal[
     "calm", "neutral", "curious", "hopeful", "appreciative", "satisfied", "relieved",
@@ -63,6 +63,7 @@ class CustomerTurn(BaseModel):
     emotion: Emotion = "neutral"
     emotion_intensity: float = Field(default=0.5, ge=0.0, le=1.0)
     nonverbal_cue: Optional[str] = None
+    affect_source: Literal["text", "audio", "video"] = "audio"
 
 
 class BackendEvent(BaseModel):
@@ -116,12 +117,14 @@ class GeneratedScenario(BaseModel):
     scenario_id: str
     domain: str
     title: str
+    problem_summary: str = ""
     customer_profile: dict
     hidden_ground_truth: dict
     expected_conflict: bool
     critical_concepts: list[str]
     steps: list[ScenarioStep]
     seed: int
+    generated_by_ai: bool = False
 
 
 class ConversationProgress(BaseModel):

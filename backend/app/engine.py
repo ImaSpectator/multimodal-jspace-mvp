@@ -140,10 +140,11 @@ def extract_from_turn(turn: CustomerTurn) -> list[Concept]:
     evidence = f"emotion={emotion}; intensity={intensity:.0%}"
     if turn.nonverbal_cue:
         evidence += f"; cue={turn.nonverbal_cue}"
-    out.append(_concept("customer_emotion", emotion, "audio", evidence,
+    affect_source = turn.affect_source
+    out.append(_concept("customer_emotion", emotion, affect_source, evidence,
                         confidence=emotion_confidence, relevance=emotion_relevance,
                         conflict_importance=conflict_importance))
-    out.append(_concept("emotion_intensity", f"{intensity:.2f}", "audio", evidence,
+    out.append(_concept("emotion_intensity", f"{intensity:.2f}", affect_source, evidence,
                         confidence=emotion_confidence, relevance=0.58 + 0.25 * intensity,
                         conflict_importance=conflict_importance * 0.8))
     return out

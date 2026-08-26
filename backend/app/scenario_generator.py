@@ -500,6 +500,7 @@ def generate_scenario(controls: ScenarioControls) -> GeneratedScenario:
         scenario_id=f"scn_{uuid.uuid4().hex[:10]}",
         domain=domain,
         title=b["title"],
+        problem_summary=b["opening"],
         customer_profile=profile,
         hidden_ground_truth={
             "authoritative_status": status_value,
