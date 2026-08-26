@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.jspace_v063.ai_provider import (  # noqa: E402
+from backend.jspace_v062.ai_provider import (  # noqa: E402
     DEFAULT_MODEL,
     analyze_media_for_jspace,
     enhance_scenario_with_gemini,
@@ -23,10 +23,10 @@ from backend.jspace_v063.ai_provider import (  # noqa: E402
     probe_gemini,
     stream_support_reply,
 )
-from backend.jspace_v063.engine import merge_concepts, refresh_state  # noqa: E402
-from backend.jspace_v063.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
-from backend.jspace_v063.schemas import ImageObservation, ScenarioControls  # noqa: E402
-from backend.jspace_v063.simulator import (  # noqa: E402
+from backend.jspace_v062.engine import merge_concepts, refresh_state  # noqa: E402
+from backend.jspace_v062.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
+from backend.jspace_v062.schemas import ImageObservation, ScenarioControls  # noqa: E402
+from backend.jspace_v062.simulator import (  # noqa: E402
     append_agent_reply,
     apply_manual_customer_message,
     apply_scenario_customer_step,
@@ -36,7 +36,7 @@ from backend.jspace_v063.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.6.3-gemini-chat-fix"
+APP_VERSION = "0.6.2-fast-stream"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -221,11 +221,9 @@ def _ai_runtime() -> dict:
     speed = st.session_state.get("settings_speed", "Fast")
     reply = st.session_state.get("settings_reply", "Concise")
     if speed == "Fast":
-        # Gemini currently rejects manually configured deadlines below 10 seconds.
-        # This is only a maximum deadline; streaming can still return immediately.
-        timeout_ms, attempts, history = 12000, 2, 4
+        timeout_ms, attempts, history = 8000, 2, 4
     else:
-        timeout_ms, attempts, history = 20000, 2, 6
+        timeout_ms, attempts, history = 14000, 2, 6
     if reply == "Concise":
         output_tokens, sentences = 120, 2
     else:
@@ -236,7 +234,7 @@ def _ai_runtime() -> dict:
         "history_turns": history,
         "max_output_tokens": output_tokens,
         "reply_sentences": sentences,
-        "scenario_timeout_ms": 12000 if speed == "Fast" else 20000,
+        "scenario_timeout_ms": 9000 if speed == "Fast" else 14000,
     }
 
 
@@ -269,6 +267,19 @@ def reset_sessions() -> None:
             del st.session_state[key]
 
 
+st.markdown(
+    f"""
+<div class="j-hero">
+  <div class="j-kicker">JSPACE // MULTIMODAL SERVICE LAB</div>
+  <div class="j-title">Live customer-service reasoning across text, voice, video and system evidence.</div>
+  <div class="j-sub">Observe a capacity-limited shared workspace preserve task-critical signals, uncertainty and cross-modal conflicts while the support agent works toward a natural resolution.</div>
+  <span class="j-pill">v{APP_VERSION}</span>
+  <span class="j-pill">{'Live AI ready' if AI_CONNECTED else 'Local simulation mode'}</span>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
 # Compact utility controls in the top-right.
 filler, u1, u2, u3, u4 = st.columns([10.4, .55, .55, .55, .55], gap="small")
 with u1:
@@ -296,7 +307,7 @@ with u3:
 with u4:
     with st.popover("⚙", help="Settings"):
         st.markdown("**Conversation settings**")
-        st.selectbox("AI response profile", ["Fast", "Balanced"], key="settings_speed", help="Fast uses a 12-second maximum Gemini deadline and compact context. The deadline is only a cap; streaming can respond much sooner. Balanced allows more time/context.")
+        st.selectbox("AI response profile", ["Fast", "Balanced"], key="settings_speed", help="Fast uses an 8-second Gemini request timeout and compact context. Balanced allows more time/context.")
         st.selectbox("Agent reply length", ["Concise", "Standard"], key="settings_reply")
         st.toggle("Use Gemini to vary scenario wording", key="settings_scenario_ai", help="Turn this off for near-instant curated scenario generation.")
         st.toggle("Auto-jump to conversation after generation", key="settings_auto_scroll")
@@ -304,7 +315,7 @@ with u4:
         st.caption(f"Gemini timeout: {cfg['timeout_ms']/1000:.0f}s/attempt · history: {cfg['history_turns']} messages")
         if st.button("Test Gemini connection", use_container_width=True, key="test_gemini"):
             with st.spinner("Testing…"):
-                ok, detail = probe_gemini(api_key=GEMINI_API_KEY, model=GEMINI_MODEL, timeout_ms=12000)
+                ok, detail = probe_gemini(api_key=GEMINI_API_KEY, model=GEMINI_MODEL, timeout_ms=5000)
             if ok:
                 st.success(f"Connected · {GEMINI_MODEL}")
             else:
@@ -313,22 +324,6 @@ with u4:
             """<button onclick="window.parent.print()" style="width:100%;padding:8px 12px;border-radius:10px;border:1px solid #4a7891;background:#0d1b2b;color:#eaf7ff;cursor:pointer">Print this view</button>""",
             height=46,
         )
-
-st.markdown("<div style=\"height:.65rem\"></div>", unsafe_allow_html=True)
-
-st.markdown(
-    f"""
-<div class="j-hero">
-  <div class="j-kicker">JSPACE // MULTIMODAL SERVICE LAB</div>
-  <div class="j-title">Live customer-service reasoning across text, voice, video and system evidence.</div>
-  <div class="j-sub">Observe a capacity-limited shared workspace preserve task-critical signals, uncertainty and cross-modal conflicts while the support agent works toward a natural resolution.</div>
-  <span class="j-pill">v{APP_VERSION}</span>
-  <span class="j-pill">{'Live AI ready' if AI_CONNECTED else 'Local simulation mode'}</span>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
 
 
 def profile_html(profile: dict) -> str:
@@ -429,16 +424,7 @@ def _message_html(row: dict, channel_label: str) -> str:
     text = row.get("text", "")
     if role == "agent":
         who = "JSpace Support Agent"
-        provider = str(row.get("provider") or "").strip()
-        if provider:
-            if provider.lower().startswith("gemini"):
-                meta = "AI provider · " + provider
-            elif "fallback" in provider.lower() or "simulation" in provider.lower():
-                meta = "Backup responder · " + provider
-            else:
-                meta = provider
-        else:
-            meta = ""
+        meta = ""
     else:
         who = "Customer"
         details = []
@@ -501,7 +487,7 @@ def stream_agent_reply(state, profile, domain: str, channel_label: str, conversa
         final_text, final_provider = partial, provider
         if partial:
             got_text = True
-            preview = state.transcript + [{"role": "agent", "text": partial, "provider": provider}]
+            preview = state.transcript + [{"role": "agent", "text": partial}]
             render_conversation(preview, channel_label, slot=conversation_slot)
         if done:
             break
@@ -566,11 +552,6 @@ def suggested_customer_prompt(domain: str, state) -> str:
     if state.recommended_action_code == "act_on_root_cause":
         return "Can you explain what you found and what you can do now to actually fix it?"
     return "Can you tell me what you've verified so far and what the next concrete step is?"
-
-
-def _use_manual_suggestion(suggestion: str) -> None:
-    """Prefill the manual chat widget on the next rerun."""
-    st.session_state["manual_chat_input"] = suggestion
 
 
 def render_start_here(domains: list[str]) -> None:
@@ -832,6 +813,10 @@ if manual_tab.open:
 
                 if not manual_state.session_ended:
                     suggestion = suggested_customer_prompt(active_manual_domain, manual_state)
+                    st.markdown(f'<div class="j-suggest">Suggested customer prompt: {html.escape(suggestion)}</div>', unsafe_allow_html=True)
+                    if st.button("Use suggested prompt", key="use_manual_suggestion"):
+                        st.session_state.manual_prefill = suggestion
+                        st.rerun()
 
                     media_types = {
                         "Text Messages": ["png", "jpg", "jpeg", "webp"],
@@ -848,34 +833,19 @@ if manual_tab.open:
                     if media_files:
                         st.caption("Attached: " + ", ".join(f.name for f in media_files))
 
-                    # Keep the chat composer directly below the conversation. A single-line
-                    # text input intentionally submits on Enter, which feels closer to live chat.
-                    input_label = "Message the support agent as the customer"
+                    prefill = st.session_state.pop("manual_prefill", "") if "manual_prefill" in st.session_state else ""
+                    input_label = "Type the customer's text message" if active_manual_channel == "Text Messages" else "Type what the customer says"
                     with st.form("manual_turn_form", clear_on_submit=True):
-                        prompt = st.text_input(
+                        prompt = st.text_area(
                             input_label,
-                            key="manual_chat_input",
-                            placeholder="Type a customer message and press Enter…",
-                            help="Press Enter or click Send message. Your message appears immediately before the support agent starts generating its reply.",
+                            value=prefill,
+                            height=92,
+                            placeholder=suggestion,
+                            help="Your message appears immediately before the support agent starts generating its reply.",
                         )
-                        send = st.form_submit_button("Send message", type="primary", use_container_width=True)
-
-                    suggest_left, suggest_right = st.columns([4.2, 1.3], gap="small")
-                    with suggest_left:
-                        st.markdown(
-                            f'<div class="j-suggest">Suggested customer prompt: {html.escape(suggestion)}</div>',
-                            unsafe_allow_html=True,
-                        )
-                    with suggest_right:
-                        st.button(
-                            "Use suggested prompt",
-                            key="use_manual_suggestion",
-                            use_container_width=True,
-                            on_click=_use_manual_suggestion,
-                            args=(suggestion,),
-                        )
-
-                    end_now = st.button("End session", use_container_width=True, key="manual_end_session")
+                        send_col, end_col = st.columns([3, 1])
+                        send = send_col.form_submit_button("Send message", type="primary", use_container_width=True)
+                        end_now = end_col.form_submit_button("End session", use_container_width=True)
 
                     if send and prompt.strip():
                         ok = process_manual_turn(

@@ -1,7 +1,7 @@
-from backend.jspace_v063 import RUNTIME_VERSION
-from backend.jspace_v063.scenario_generator import generate_scenario, list_domains
-from backend.jspace_v063.schemas import ScenarioControls
-from backend.jspace_v063.simulator import (
+from backend.jspace_v061 import RUNTIME_VERSION
+from backend.jspace_v061.scenario_generator import generate_scenario, list_domains
+from backend.jspace_v061.schemas import ScenarioControls
+from backend.jspace_v061.simulator import (
     append_agent_reply,
     apply_manual_customer_message,
     apply_scenario_customer_step,
@@ -12,7 +12,7 @@ from backend.jspace_v063.simulator import (
 
 
 def test_versioned_runtime_imports_are_atomic():
-    assert RUNTIME_VERSION == "0.6.3"
+    assert RUNTIME_VERSION == "0.6.1"
     assert callable(apply_scenario_customer_step)
     assert callable(end_manual_session)
 

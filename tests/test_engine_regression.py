@@ -1,5 +1,5 @@
-from backend.jspace_v063.engine import extract_from_turn, merge_concepts, refresh_state
-from backend.jspace_v063.schemas import CustomerTurn, SessionConfig, SessionState
+from backend.app.engine import extract_from_turn, merge_concepts, refresh_state
+from backend.app.schemas import CustomerTurn, SessionConfig, SessionState
 
 
 def test_capacity_limit_is_respected():
