@@ -1,0 +1,18 @@
+[
+  {
+    "case_id": "payment_conflict_001",
+    "customer_turns": [
+      {"text": "My payment keeps failing. I've tried it three times and it's still not working.", "audio_tone": "frustrated"},
+      {"text": "Okay, I think it worked now. It's fine.", "audio_tone": "frustrated"}
+    ],
+    "backend_events": [
+      {"event_type": "payment_attempt", "value": "3", "metadata": {}},
+      {"event_type": "payment_status", "value": "failed", "metadata": {}}
+    ],
+    "expected": {
+      "conflict": true,
+      "critical_concepts": ["backend_payment_status", "customer_belief_status"],
+      "recommended_action_contains": "backend"
+    }
+  }
+]
