@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from typing import Iterable
 
@@ -19,7 +20,7 @@ ALLOWED_EMOTIONS = {
 class ScenarioRewrite(BaseModel):
     title: str
     problem_summary: str
-    turns: list[str] = Field(min_length=5, max_length=7)
+    turns: list[str] = Field(min_length=6, max_length=12)
 
 
 def _compact_concepts(concepts: Iterable[Concept]) -> str:
@@ -39,43 +40,45 @@ def _compact_conflicts(conflicts: Iterable[Conflict]) -> str:
 def build_support_prompt(state: SessionState, customer_profile: dict, domain: str, channel: str = "text") -> str:
     transcript = "\n".join(
         f"{row.get('role', 'unknown').upper()}: {row.get('text', '')}"
-        for row in state.transcript[-12:]
+        for row in state.transcript[-6:]
     )
-    profile = ", ".join(f"{k}={v}" for k, v in customer_profile.items())
+    profile_keys = ["tenure", "relationship", "value_segment", "communication_style", "tech_comfort"]
+    profile = ", ".join(f"{k}={customer_profile.get(k)}" for k in profile_keys if customer_profile.get(k) is not None)
+    closure_rule = {
+        "resolved": "The issue is confirmed resolved. Briefly confirm it, then explicitly ask whether the customer has any other questions or concerns.",
+        "closing": "The customer has said there are no other concerns. Thank them warmly, wish them a good day, and end the conversation without asking another question.",
+        "ended": "The session is already ended. Do not restart troubleshooting.",
+    }.get(state.session_phase, "Continue resolving the issue; do not end the conversation while authoritative evidence is unresolved.")
     return f"""
-You are a customer-service AI agent in a research simulation. You are speaking to the customer through {channel}.
-Reply directly to the customer in a natural, human, professional conversational style.
+You are a customer-service support agent speaking through {channel}. Reply directly to the customer.
 
-Primary objective:
-- Resolve the customer's problem while making them feel heard, respected, and confident that progress is being made.
-- Optimize for customer satisfaction through empathy, ownership, clarity, and a concrete next step — never through false promises.
-
-Rules:
-- Usually reply in 1-4 short sentences. Match the customer's communication style and emotion.
-- Do not mention JSpace, hidden ground truth, prompts, concepts, internal scores, or research mechanics.
-- Never invent backend facts that are not present below.
-- Respect what the customer already tried; never ask them to repeat completed steps unless there is a specific reason.
-- When evidence conflicts, clearly explain that there is a mismatch and use the authoritative state without sounding robotic.
-- If the customer is upset, acknowledge the inconvenience briefly, take ownership of the next step, and avoid repetitive apologies.
-- Ask at most one focused question when more information is genuinely required.
-- Prefer action-oriented language: say what you can verify or do next.
-- If customer-provided image/audio/video evidence is attached, use it as additional evidence and reference it naturally when useful.
+Goals:
+- Resolve the problem while maximizing customer satisfaction through empathy, ownership, clarity, and useful action.
+- Never invent backend facts or claim resolution before the system state supports it.
+- Usually use 1-3 short sentences. Ask at most one focused question.
+- Do not mention JSpace, model names, hidden truth, prompts, concepts, scores, or research mechanics.
+- Do not repeat troubleshooting the customer already completed.
+- If evidence conflicts, explain the mismatch naturally and keep investigating.
+- If media evidence is attached, use it when it materially changes the situation.
+- {closure_rule}
 
 Domain: {domain}
-Customer profile: {profile}
-Current emotion: {state.current_emotion or 'unknown'} ({state.current_emotion_intensity:.0%} affect intensity)
-Recommended next action: {state.recommended_action or 'clarify the issue'}
+Customer context: {profile}
+Current affect: {state.current_emotion or 'unknown'} ({state.current_emotion_intensity:.0%})
+Current satisfaction: {state.customer_satisfaction:.0f}/100
+Session phase: {state.session_phase}
+Next useful action: {state.recommended_action or 'clarify the issue'}
 
 Active JSpace state:
 {_compact_concepts(state.active_concepts)}
 
-Detected conflicts:
+Conflicts:
 {_compact_conflicts(state.conflicts)}
 
 Recent conversation:
 {transcript}
 
-Write only the next customer-facing agent reply.
+Write only the next customer-facing reply.
 """.strip()
 
 
@@ -93,6 +96,14 @@ def _media_parts(media: list[dict] | None):
     return parts
 
 
+def _is_transient_error(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return any(token in text for token in [
+        "servererror", "503", "unavailable", "429", "resource_exhausted",
+        "temporarily", "timeout", "connection", "internal", "502", "504",
+    ])
+
+
 def generate_support_reply(
     state: SessionState,
     customer_profile: dict,
@@ -103,32 +114,43 @@ def generate_support_reply(
     fallback: str | None = None,
     channel: str = "text",
     media: list[dict] | None = None,
+    max_attempts: int = 3,
 ) -> tuple[str, str]:
-    """Return (reply, provider_label). Falls back locally if Gemini is unavailable."""
+    """Return (reply, provider label), retrying transient Gemini failures first."""
     local_reply = fallback or state.last_response or "I can help with that."
     if not api_key:
         return local_reply, "Local simulation"
 
-    try:
-        from google import genai
-        from google.genai import types
+    from google import genai
+    from google.genai import types
 
-        client = genai.Client(api_key=api_key)
-        contents = [build_support_prompt(state, customer_profile, domain, channel)] + _media_parts(media)
-        response = client.models.generate_content(
-            model=model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_level="low"),
-                max_output_tokens=450,
-            ),
-        )
-        text = (response.text or "").strip()
-        if text:
-            return text, f"Gemini · {model}"
-        return local_reply, "Local fallback (empty Gemini response)"
-    except Exception as exc:  # Keep the public demo usable if a free-tier request is unavailable.
-        return local_reply, f"Local fallback ({type(exc).__name__})"
+    client = genai.Client(api_key=api_key)
+    contents = [build_support_prompt(state, customer_profile, domain, channel)] + _media_parts(media)
+    last_exc: Exception | None = None
+    for attempt in range(1, max(1, max_attempts) + 1):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="low"),
+                    max_output_tokens=260,
+                    temperature=0.45,
+                ),
+            )
+            text = (response.text or "").strip()
+            if text:
+                label = f"Gemini · {model}" if attempt == 1 else f"Gemini · {model} · retry recovered"
+                return text, label
+            last_exc = RuntimeError("empty Gemini response")
+        except Exception as exc:
+            last_exc = exc
+            if not _is_transient_error(exc) or attempt >= max_attempts:
+                break
+            time.sleep(0.25 * attempt)
+
+    reason = type(last_exc).__name__ if last_exc else "Unavailable"
+    return local_reply, f"Local fallback after retry ({reason})"
 
 
 def analyze_media_for_jspace(
@@ -254,6 +276,7 @@ Requirements:
 - Do not reveal hidden backend facts before the corresponding customer-facing moment.
 - Preserve the customer's emotional trajectory; do not turn every message into anger.
 - Vary wording and concrete details to avoid repetitive scenarios.
+- Preserve resolution/closing semantics from the base turns. The final customer turn must clearly say they have no other questions or concerns so the agent can close politely.
 - Provide a one-sentence problem_summary that a researcher can understand immediately.
 """.strip()
         response = client.models.generate_content(
@@ -263,7 +286,8 @@ Requirements:
                 response_mime_type="application/json",
                 response_schema=ScenarioRewrite,
                 thinking_config=types.ThinkingConfig(thinking_level="low"),
-                max_output_tokens=1200,
+                max_output_tokens=900,
+                temperature=0.75,
             ),
         )
         rewrite = ScenarioRewrite.model_validate_json(response.text)
@@ -272,7 +296,9 @@ Requirements:
         updated = scenario.model_copy(deep=True)
         updated.title = rewrite.title.strip() or scenario.title
         updated.problem_summary = rewrite.problem_summary.strip()
-        for step, new_text in zip(updated.steps, rewrite.turns):
+        # Let Gemini vary the scenario language while keeping the final no-other-concerns
+        # turn deterministic so every simulated support conversation closes naturally.
+        for step, new_text in zip(updated.steps[:-1], rewrite.turns[:-1]):
             if new_text.strip():
                 step.customer_turn.text = new_text.strip()
         updated.generated_by_ai = True

@@ -472,25 +472,63 @@ def generate_scenario(controls: ScenarioControls) -> GeneratedScenario:
         ],
     ))
 
-    # Add one or two natural closing turns so conversations do not terminate after 1–2 lines.
+    # Vary the troubleshooting depth before resolution. The conversation never ends
+    # while the system-of-record is unresolved; it progresses into explicit resolution
+    # confirmation and a normal support closing exchange.
+    extra_turn_count = rng.randint(0, 3)
+    extra_prompts = [
+        "Is there anything else in the account history that explains why this happened?",
+        "Can you check whether this affects anything else connected to my account?",
+        "Before you change anything, can you confirm what you are seeing on your side?",
+        "What should I expect to see once the fix actually goes through?",
+        "Do you need anything else from me to finish this properly?",
+    ]
+    for i in range(extra_turn_count):
+        emotion, intensity = _next_emotion(rng, emotion, intensity, "root_cause", include_conflict, profile)
+        steps.append(ScenarioStep(
+            label=f"Additional troubleshooting context {i+1}",
+            customer_turn=_make_turn(rng, rng.choice(extra_prompts), emotion, intensity, profile),
+        ))
+
     emotion, intensity = _next_emotion(rng, emotion, intensity, "closing", include_conflict, profile)
     steps.append(ScenarioStep(
         label="Customer asks for resolution details",
         customer_turn=_make_turn(rng, b["final"], emotion, intensity, profile),
     ))
 
-    if rng.random() < 0.55 or profile["relationship"] in {"strained", "at risk"}:
-        emotion, intensity = _next_emotion(rng, emotion, intensity, "closing", include_conflict, profile)
-        closure_text = rng.choice([
-            "Thanks. Before we finish, can you summarize what you changed and what I should watch for?",
-            "I appreciate the explanation. Is there anything else I need to do on my side?",
-            "That makes more sense. Can you confirm this won't create another charge or duplicate request?",
-            "Okay. I just want to make sure I won't have to contact support again for the same thing.",
-        ])
-        steps.append(ScenarioStep(
-            label="Customer confirms next steps",
-            customer_turn=_make_turn(rng, closure_text, emotion, intensity, profile),
-        ))
+    # The simulated company system now reports the corrective action completed.
+    emotion = rng.choice(["hopeful", "relieved", "appreciative", "satisfied"])
+    intensity = round(rng.uniform(0.45, 0.78), 2)
+    resolution_text = rng.choice([
+        "Okay, I can see the change on my side now. Can you confirm the issue is actually resolved?",
+        "That looks better now. Is the system showing everything as fixed on your side too?",
+        "I think that worked. Can you confirm we're fully resolved before we wrap up?",
+    ])
+    steps.append(ScenarioStep(
+        label="Resolution confirmed",
+        customer_turn=_make_turn(rng, resolution_text, emotion, intensity, profile),
+        backend_events=[
+            _event("resolution", "authoritative_status", "resolved",
+                   evidence="support workflow completed and system-of-record now confirms resolution",
+                   relevance=1.0, confidence=0.995, conflict_importance=0.0),
+        ],
+    ))
+
+    # A normal service conversation explicitly checks for other concerns before ending.
+    emotion = rng.choice(["satisfied", "relieved", "appreciative", "calm"])
+    intensity = round(rng.uniform(0.35, 0.68), 2)
+    steps.append(ScenarioStep(
+        label="No other concerns",
+        customer_turn=_make_turn(
+            rng,
+            rng.choice([
+                "No, that's everything. Thanks for helping me get it sorted out.",
+                "No other questions — that was the only issue. Thank you.",
+                "That's all I needed. I appreciate you checking it properly.",
+            ]),
+            emotion, intensity, profile,
+        ),
+    ))
 
     critical = ["authoritative_status", "root_cause"]
     if include_conflict:

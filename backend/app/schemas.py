@@ -99,6 +99,9 @@ class SessionState(BaseModel):
     last_response: Optional[str] = None
     current_emotion: Optional[Emotion] = None
     current_emotion_intensity: float = 0.0
+    customer_satisfaction: float = Field(default=50.0, ge=0.0, le=100.0)
+    session_phase: Literal["active", "resolving", "resolved", "closing", "ended"] = "active"
+    session_ended: bool = False
 
 
 class ScenarioControls(BaseModel):

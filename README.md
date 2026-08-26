@@ -1,45 +1,46 @@
-# Multimodal JSpace Customer-Service MVP — v0.5
+# JSpace Live — Multimodal Customer Service v0.6
 
-A single-service Streamlit research MVP for capacity-limited, conflict-aware multimodal customer-service reasoning.
+A single-service Streamlit research experience for capacity-limited, conflict-aware multimodal customer-service reasoning.
 
-## What changed in v0.5
+## Highlights in v0.6
 
-- Replaced OpenAI with **Gemini 3.7 Flash** (`gemini-3.7-flash`) through the official `google-genai` Python SDK.
-- Gemini powers live customer-service replies when `GEMINI_API_KEY` is configured.
-- Scenario wording is automatically remixed by Gemini when connected, while controlled ground truth remains unchanged.
-- Manual mode accepts real **image, audio, and video** evidence and sends it to Gemini.
-- Added channel choices: Text Messages, Voice Call, Video + Voice, and Multimodal Mix.
-- Scenario generation now prepares a case first; the conversation starts only when the user presses **Start conversation**.
-- New customer/agent turns animate into a phone-style conversation instead of appearing as a finished transcript.
-- Recommended next move is surfaced near the top of JSpace.
-- Evidence & provenance and Researcher view are expanded by default.
-- Added a **Start Here** page explaining modes, JSpace nodes, capacity K, affect intensity, priority, provenance, and all domains.
-- Improved responsive emotion display so longer emotional labels do not get cut off.
+- Scenario and Manual conversations now show the **customer message immediately**, then display **“Support Agent is typing…”** while the AI call is running.
+- Gemini calls retry transient service errors before using the local recovery responder.
+- Scenario conversations vary in length and do not close while the simulated system-of-record is unresolved.
+- Every Scenario Lab case progresses through confirmed resolution, an “anything else?” check, a customer “no other concerns” turn, and a final goodbye.
+- Manual mode stays open for unlimited turns until the user presses **End session**.
+- Manual input sits directly below the live conversation and includes a context-aware **Suggested customer prompt**.
+- Added dynamic **Satisfaction** alongside Patience and Trust.
+- JSpace K is now intentionally compact: **3–6 concepts**, default 4.
+- Text, Voice, Video + Voice, and Multimodal Mix now have different evidence behavior.
+- Multimodal modes add visual/audio affect evidence that can support or contradict customer wording and backend state.
+- Evidence & provenance and Researcher View are closed by default again.
+- Removed the native Streamlit toolbar and replaced it with purpose-built Help, Share, Reset, Settings and Print controls.
+- Removed visible provider/model labels from the customer conversation. Provider diagnostics remain in Researcher View.
+- Primary actions use a cyan/blue/violet visual system rather than the previous orange accent.
+- The product is now labeled **JSpace Live**, not “MVP” in the UI.
 
-## Streamlit Community Cloud setup
+## Gemini setup
 
-The app is single-service. You do **not** need Render or FastAPI.
-
-Set the Streamlit entry point to:
+Streamlit Community Cloud entry point:
 
 ```text
 frontend/app.py
 ```
 
-In **Streamlit → App settings → Secrets**, add:
+In **Streamlit → App settings → Secrets**:
 
 ```toml
 GEMINI_API_KEY = "your-google-ai-studio-api-key"
 GEMINI_MODEL = "gemini-3.7-flash"
+
+# Optional: fills the custom Share control automatically.
+PUBLIC_APP_URL = "https://your-app.streamlit.app"
 ```
 
-Do not put your API key in GitHub.
-
-Gemini free-tier availability and rate limits are controlled by Google. The app gracefully falls back to its local simulator if the API key is absent, rate-limited, or a request fails.
+Never commit a real API key to GitHub.
 
 ## Run locally
-
-From the repository root:
 
 ```powershell
 python -m venv .venv
@@ -49,30 +50,49 @@ python -m pip install -r requirements-dev.txt
 python -m streamlit run frontend/app.py --server.port 8501
 ```
 
-Open:
+Open `http://localhost:8501`.
+
+## Conversation lifecycle
 
 ```text
-http://localhost:8501
+Customer signal
+   ↓ appears immediately
+JSpace update / evidence merge
+   ↓
+Support Agent is typing…
+   ↓
+Gemini reply (with transient retry)
+   ↓
+Satisfaction + JSpace update
+   ↓
+continue until resolved
+   ↓
+agent asks if there are other concerns
+   ↓
+customer says no
+   ↓
+polite goodbye / session ended
 ```
 
-For local Gemini calls, either add a `.streamlit/secrets.toml` file (do not commit it) or set the environment variable `GEMINI_API_KEY`.
+## Channel behavior
 
-## Research architecture
+- **Text Messages** — text affect is primary; screenshots can still be attached in Manual mode.
+- **Voice Call** — vocal affect is treated as evidence; visual scenario evidence is suppressed.
+- **Video + Voice** — vocal/visible affect plus live visual context can enter JSpace.
+- **Multimodal Mix** — text/voice, visual/media, and company evidence can all compete in the shared workspace.
 
-```text
-Customer text / voice / video / image
-             +
-Company/backend evidence
-             ↓
-Candidate concepts
-             ↓
-Conflict detection
-             ↓
-Capacity-limited Top-K JSpace
-             ↓
-Recommended next action
-             ↓
-Gemini 3.7 Flash support response
-```
+## Testing
 
-The JSpace is an external research workspace inspired by limited-capacity global-workspace ideas. It is not an extraction of Gemini's internal hidden state.
+The v0.6 source includes regression and interaction tests covering:
+
+- 18 domains
+- variable conversation length
+- explicit resolved/closing lifecycle
+- transient Gemini retry recovery
+- satisfaction updates
+- manual End Session
+- compact capacity limits
+- conflict surfacing and later resolution
+- UI controls and removal of obsolete features
+
+The packaged build was stress-tested across 7,200 full scenario runs (18 domains × 100 seeds × K=3/4/5/6) with zero state/capacity/closure failures.

@@ -81,7 +81,7 @@ def test_each_domain_generates_realistic_multiturn_scenario(domain):
     scenario = generate_scenario(ScenarioControls(domain=domain, seed=12345))
     assert scenario.domain == domain
     assert scenario.problem_summary
-    assert 5 <= len(scenario.steps) <= 7
+    assert 7 <= len(scenario.steps) <= 12
     assert all(step.customer_turn.text.strip() for step in scenario.steps)
     assert all(0.0 <= step.customer_turn.emotion_intensity <= 1.0 for step in scenario.steps)
 
@@ -143,11 +143,14 @@ def test_conflict_cases_surface_conflict_when_fully_run():
         if not scenario.expected_conflict:
             continue
         found += 1
-        state, _ = run_full_scenario(scenario, capacity_k=3)
-        assert state.conflicts
-        names = {c.name for c in state.active_concepts}
+        state, snapshots = run_full_scenario(scenario, capacity_k=3)
+        conflict_snaps = [snapshot for snapshot in snapshots if snapshot.conflicts]
+        assert conflict_snaps
+        names = {c.name for c in conflict_snaps[0].active_concepts}
         assert "authoritative_status" in names
         assert "customer_visible_status" in names or "customer_belief_status" in names
+        assert state.session_ended
+        assert not state.conflicts
         if found >= 8:
             break
     assert found >= 8
@@ -283,7 +286,7 @@ def test_frontend_has_requested_experience_changes():
     required = [
         "Start Here", "Scenario Lab", "Manual Multimodal AI", "Text Messages", "Voice Call",
         "Video + Voice", "Multimodal Mix", "Start conversation", "Recommended next move",
-        'expanded=True', "GEMINI_API_KEY", "Gemini 3.7 Flash", "Customer affect",
+        'expanded=False', "GEMINI_API_KEY", "Gemini 3.7 Flash", "Customer affect",
     ]
     for text in required:
         assert text in source

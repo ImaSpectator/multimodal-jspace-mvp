@@ -286,6 +286,11 @@ def choose_active(concepts: list[Concept], capacity_k: int, preserve_conflicts: 
 
 def recommend_action(state: SessionState) -> tuple[str, str]:
     active = {c.name: c for c in state.active_concepts}
+    if state.session_phase == "closing":
+        return "close_session", "Acknowledge that there are no other concerns, thank the customer, and end the conversation warmly."
+    authoritative = active.get("authoritative_status")
+    if authoritative and authoritative.value == "resolved" and not state.conflicts:
+        return "confirm_resolution", "Confirm the resolution clearly, then ask whether the customer has any other questions or concerns."
     if state.conflicts:
         return "resolve_conflict", "Verify the authoritative system state, explain the mismatch, and avoid confirming resolution prematurely."
 
@@ -338,7 +343,11 @@ def synthesize_response(state: SessionState) -> str:
         "appreciative": "Absolutely.",
     }.get(emotion, "")
 
-    if state.recommended_action_code == "resolve_conflict":
+    if state.recommended_action_code == "close_session":
+        body = "I'm glad we could get this wrapped up. Thanks for contacting support, and I hope you have a great day."
+    elif state.recommended_action_code == "confirm_resolution":
+        body = "The system now shows the issue as resolved. Is there anything else I can help you with today?"
+    elif state.recommended_action_code == "resolve_conflict":
         body = "I'm seeing a mismatch between what appears on your side and what the system of record shows. I won't call this resolved yet; I'll verify the authoritative state and work from that."
     elif state.recommended_action_code == "act_on_root_cause" and active.get("root_cause"):
         body = f"I found the underlying issue: {active['root_cause'].value}. I'll use that cause to take the next concrete step instead of sending you through generic troubleshooting again."
