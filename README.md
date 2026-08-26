@@ -2,7 +2,7 @@
 
 A single-service Streamlit research experience for capacity-limited, conflict-aware multimodal customer-service reasoning.
 
-Link to webiste: https://multimodal-jspace-mvp-xl8khikqwpvcxh44x3cjvq.streamlit.app/#key-controls-and-signals 
+Link to webiste: https://multimodal-jspace-mvp-xl8khikqwpvcxh44x3cjvq.streamlit.app/
 
 ## What changed in v0.6.2
 
