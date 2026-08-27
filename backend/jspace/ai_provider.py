@@ -842,3 +842,75 @@ def probe_deepseek(
         return bool(text), text or "Empty response"
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"
+
+
+def analyze_conversation_summary(
+    *,
+    transcript: list[dict],
+    domain: str,
+    channel: str,
+    profile: dict,
+    satisfaction: float,
+    conflicts: int,
+    api_key: str | None,
+    model: str = DEFAULT_MODEL,
+    base_url: str = DEFAULT_BASE_URL,
+    timeout_s: float = 12.0,
+    language: str = "English",
+) -> tuple[str, str]:
+    """Generate a concise post-session analysis; fall back locally when TokenHub is unavailable."""
+    chinese = _language_is_chinese(language)
+    customer_turns = sum(1 for r in transcript if r.get("role") == "customer")
+    agent_turns = sum(1 for r in transcript if r.get("role") == "agent")
+    patience = max(0, int(profile.get("patience", 0)))
+    trust = int(profile.get("trust", 0))
+    local = (
+        f"总结：本次会话共 {customer_turns} 轮客户消息、{agent_turns} 轮客服回复。最终满意度 {satisfaction:.0f}/100，耐心度 {patience}/100，信任度 {trust}/100。\n"
+        f"结果：{'会话中仍存在冲突，需要进一步核查。' if conflicts else '结束时没有活跃的冲突信号。'}\n"
+        "改进建议：继续优先给出具体进展、避免重复排查，并在承诺下一步时说明可验证的结果。"
+        if chinese else
+        f"Summary: The conversation had {customer_turns} customer turns and {agent_turns} agent replies. Final satisfaction was {satisfaction:.0f}/100, patience {patience}/100, and trust {trust}/100.\n"
+        f"Outcome: {'Active conflicts remained and would need further verification.' if conflicts else 'No active conflict signal remained at the end.'}\n"
+        "Improvement: keep prioritizing concrete progress, avoid repeated troubleshooting, and make every promised next step verifiable."
+    )
+    if not api_key:
+        return local, "Local analysis"
+    transcript_text = "\n".join(
+        f"{str(r.get('role','unknown')).upper()}: {str(r.get('text',''))}" for r in transcript[-24:]
+    )
+    language_rule = "Write entirely in Simplified Chinese." if chinese else "Write entirely in natural English."
+    prompt = f"""
+You are evaluating a completed customer-service conversation for a JSpace research demo.
+{language_rule}
+Domain: {domain}
+Channel: {channel}
+Final satisfaction: {satisfaction:.0f}/100
+Final patience: {patience}/100
+Final trust: {trust}/100
+Active conflicts at end: {conflicts}
+
+Conversation:
+{transcript_text}
+
+Give a compact analysis with these sections:
+1. Summary and outcome
+2. What the support agent did well
+3. What could be improved
+4. JSpace / evidence-handling observations
+5. Customer experience conclusion
+
+Ground every point in the transcript. Do not invent system facts. Keep the whole response under 450 words.
+""".strip()
+    try:
+        client = _cached_client(api_key, base_url, timeout_s)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=900,
+            temperature=0.35,
+            extra_body={"thinking": {"type": "disabled"}},
+        )
+        text = (response.choices[0].message.content or "").strip()
+        return (text or local), (f"DeepSeek · {model}" if text else "Local analysis")
+    except Exception as exc:
+        return local, f"Local analysis ({type(exc).__name__})"

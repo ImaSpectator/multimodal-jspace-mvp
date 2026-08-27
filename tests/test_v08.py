@@ -320,7 +320,7 @@ def test_v082_manual_composer_scroll_and_bilingual_controls():
     source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
     assert 'with st.form("manual_chat_form"' in source
     assert 'st.form_submit_button' in source
-    assert 'key="use_manual_suggestion"' in source
+    assert 'use_manual_suggestion_' in source
     assert 'on_click=_queue_manual_suggestion' in source
     assert 'manual_chat_prefill' in source
     assert 'Fill the chat box immediately; then press Enter or Send.' in source
@@ -344,7 +344,7 @@ def test_v082_chinese_prompt_and_fallback_are_language_aware():
 
 def test_v082_readme_profiles_are_current_and_no_secret_setup_section():
     text = (Path(__file__).parents[1] / "README.md").read_text()
-    assert "# JSpace Live — v1.1" in text
+    assert "# JSpace Live — v1.2" in text
     assert "**Fast** | 12 seconds | Up to 2 | 4 recent messages | 12 seconds" in text
     assert "**Balanced** | 20 seconds | Up to 2 | 6 recent messages | 20 seconds" in text
     assert "**Concise** — up to 120 output tokens" in text

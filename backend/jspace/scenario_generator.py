@@ -280,26 +280,33 @@ def get_blueprint(domain: str) -> dict:
     return _blueprints()[domain]
 
 
-def _profile(rng: random.Random) -> dict:
+def _profile(rng: random.Random, domain: str | None = None) -> dict:
     tenure_years = rng.choice([0.1, 0.5, 1, 2, 3, 5, 7, 10, 12])
     relationship = rng.choices(
         ["new", "positive", "loyal", "neutral", "strained", "at risk"],
         weights=[8, 22, 18, 22, 20, 10],
         k=1,
     )[0]
-    # Patience starts full for every new support interaction and only decays when
-    # the conversation stalls. Trust starts from the relationship context and can
-    # fluctuate slightly as the interaction progresses.
-    patience = 100
+    previous_contacts = rng.randint(0, 5)
+    communication_style = rng.choice(["concise", "detail-oriented", "conversational", "direct", "cautious", "question-heavy"])
+    # Starting patience reflects customer context rather than always beginning at 100.
+    # Most customers still begin fairly patient, while strained/at-risk relationships,
+    # repeated recent contacts, and urgent domains can start materially lower.
+    relationship_base = {
+        "new": 88, "positive": 94, "loyal": 97, "neutral": 86, "strained": 67, "at risk": 52,
+    }[relationship]
+    urgency_penalty = 8 if domain in {"banking_fraud", "account_access", "travel", "event_ticketing"} else (4 if domain in {"payment", "internet", "utilities"} else 0)
+    style_adjustment = {"direct": -4, "question-heavy": -2, "cautious": -1, "concise": 1, "detail-oriented": 0, "conversational": 2}[communication_style]
+    patience = int(max(28, min(100, relationship_base - previous_contacts * 4 - urgency_penalty + style_adjustment + rng.randint(-4, 5))))
     trust = rng.randint(45, 88)
     return {
         "name": rng.choice(["Alex", "Maya", "Jordan", "Sam", "Taylor", "Chris", "Morgan", "Riley", "Jamie", "Avery"]),
         "tenure": "new customer" if tenure_years < 0.5 else ((("1 year" if int(tenure_years) == 1 else f"{int(tenure_years)} years") if tenure_years >= 1 else "6 months")),
         "relationship": relationship,
         "loyalty_tier": rng.choice(["standard", "silver", "gold", "platinum"]),
-        "previous_contacts_90d": rng.randint(0, 5),
+        "previous_contacts_90d": previous_contacts,
         "value_segment": rng.choice(["standard", "high value", "strategic", "occasional"]),
-        "communication_style": rng.choice(["concise", "detail-oriented", "conversational", "direct", "cautious", "question-heavy"]),
+        "communication_style": communication_style,
         "tech_comfort": rng.choice(["low", "medium", "high"]),
         "patience": patience,
         "trust": trust,
@@ -410,7 +417,7 @@ def generate_scenario(controls: ScenarioControls) -> GeneratedScenario:
     blueprints = _blueprints()
     domain = controls.domain if controls.domain in blueprints else rng.choice(list(blueprints))
     b = blueprints[domain]
-    profile = _profile(rng)
+    profile = _profile(rng, domain)
 
     # Conflict is deliberately always randomized; there is no user-facing conflict switch.
     include_conflict = rng.random() < 0.58
@@ -562,7 +569,7 @@ def generate_manual_context(domain: str, seed: int | None = None) -> tuple[dict,
     if domain not in blueprints:
         domain = rng.choice(list(blueprints))
     b = blueprints[domain]
-    profile = _profile(rng)
+    profile = _profile(rng, domain)
     status_type, status_value, status_evidence = b["status_event"]
     events = [
         _event("profile", "customer_domain", domain, evidence=f"customer service domain={domain}", relevance=0.99, confidence=0.99),

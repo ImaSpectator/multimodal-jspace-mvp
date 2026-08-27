@@ -10,10 +10,10 @@ def _source():
 
 def test_v11_borderless_toolbar_and_link_icon():
     source = _source()
-    assert 'APP_VERSION = "1.1.0-behavior-polish"' in source
+    assert 'APP_VERSION = "1.2.0-export-analysis"' in source
     assert ':material/link:' in source
     assert 'background:transparent!important; box-shadow:none!important;' in source
-    assert 'border:0!important; border-radius:999px!important;' in source
+    assert 'border:0!important; border-radius:8px!important;' in source
     assert 'align-items:center!important; justify-content:center!important;' in source
 
 
@@ -36,22 +36,23 @@ def test_v11_chinese_concepts_have_name_and_value_localization():
     assert 'display_concept_value(c.name, c.value)' in source
 
 
-def test_v11_patience_starts_full_and_relationship_updates():
+def test_v11_patience_relationship_updates_from_profile_baseline():
     profile, backend = generate_manual_context("payment", seed=42)
-    assert profile["patience"] == 100
+    starting_patience = profile["patience"]
     state = new_manual_state(capacity_k=4, backend_events=backend, profile=profile)
     original_trust = profile["trust"]
     update_customer_relationship(profile, state, "I'm checking the latest state.", "Local fallback after bounded retry (TimeoutError)")
-    assert profile["patience"] < 100
+    assert profile["patience"] < starting_patience
     assert profile["trust"] <= original_trust
 
 
 def test_v11_progress_does_not_consume_patience_and_can_raise_trust():
     profile, backend = generate_manual_context("account_access", seed=7)
     state = new_manual_state(capacity_k=4, backend_events=backend, profile=profile)
+    starting_patience = profile["patience"]
     original_trust = profile["trust"]
     update_customer_relationship(profile, state, "I've identified the root cause and the next step is to unlock the account.", "DeepSeek · model")
-    assert profile["patience"] == 100
+    assert profile["patience"] == starting_patience
     assert profile["trust"] >= original_trust
 
 

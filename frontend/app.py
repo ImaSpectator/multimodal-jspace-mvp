@@ -21,12 +21,14 @@ from backend.jspace.ai_provider import (  # noqa: E402
     DEFAULT_AUDIO_MODEL,
     DEFAULT_VIDEO_MODEL,
     analyze_media_for_jspace,
+    analyze_conversation_summary,
     enhance_scenario_with_deepseek,
     generate_support_reply,
     probe_deepseek,
     stream_support_reply,
 )
 from backend.jspace.engine import merge_concepts, refresh_state  # noqa: E402
+from backend.jspace.conversation_export import build_conversation_pdf  # noqa: E402
 from backend.jspace.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
 from backend.jspace.schemas import ImageObservation, ScenarioControls  # noqa: E402
 from backend.jspace.simulator import (  # noqa: E402
@@ -71,7 +73,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
         patience_loss += 3.0 + min(3.0, max(0, agent_turns - 3) * 0.7)
     if not concrete_progress and agent_turns >= 4 and getattr(state, "session_phase", "active") == "active":
         patience_loss += 1.5
-    profile["patience"] = int(round(max(0.0, min(100.0, float(profile.get("patience", 100)) - patience_loss))))
+    profile["patience"] = int(round(min(100.0, float(profile.get("patience", 85)) - patience_loss)))
     trust_delta = 0.0
     if getattr(state, "session_phase", "active") in {"resolved", "closing"} or any(x in low for x in ["confirmed resolved", "issue is resolved", "已经解决", "确认已经解决"]):
         trust_delta += 4.0
@@ -88,7 +90,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-APP_VERSION = "1.1.0-behavior-polish"
+APP_VERSION = "1.2.0-export-analysis"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -279,20 +281,20 @@ a.anchor-link, [data-testid="stMarkdownContainer"] h1 > a, [data-testid="stMarkd
 hr { border-color:rgba(140,175,215,.12)!important; }
 @media(max-width:1000px){ .j-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.j-node-grid{grid-template-columns:1fr 1fr}.j-title{font-size:1.72rem}.j-msg{max-width:94%} }
 
-/* v1.1 website-style top-right toolbar: borderless controls with exact centering. */
-.st-key-utility_toolbar { margin-top:-.10rem; margin-bottom:.42rem; }
-.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.12rem!important; }
+/* v1.2 header-style toolbar: no visible button chrome, positioned higher like a normal site header. */
+.st-key-utility_toolbar { margin-top:-1.15rem; margin-bottom:.20rem; }
+.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.04rem!important; }
 .st-key-utility_toolbar [data-testid="column"]:first-child { flex:1 1 auto!important; min-width:0!important; }
-.st-key-utility_toolbar [data-testid="column"]:nth-child(2) { flex:0 0 3.15rem!important; width:3.15rem!important; min-width:3.15rem!important; max-width:3.15rem!important; }
-.st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) { flex:0 0 2.42rem!important; width:2.42rem!important; min-width:2.42rem!important; max-width:2.42rem!important; }
+.st-key-utility_toolbar [data-testid="column"]:nth-child(2) { flex:0 0 2.75rem!important; width:2.75rem!important; min-width:2.75rem!important; max-width:2.75rem!important; }
+.st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) { flex:0 0 2.18rem!important; width:2.18rem!important; min-width:2.18rem!important; max-width:2.18rem!important; }
 .st-key-utility_toolbar .stButton { margin:0!important; width:100%!important; }
 .st-key-utility_toolbar .stButton > button {
-  position:relative!important; width:100%!important; height:2.42rem!important; min-height:2.42rem!important;
-  padding:0!important; margin:0!important; border:0!important; border-radius:999px!important;
+  position:relative!important; width:100%!important; height:2.18rem!important; min-height:2.18rem!important;
+  padding:0!important; margin:0!important; border:0!important; border-radius:8px!important;
   background:transparent!important; box-shadow:none!important; color:#DDEAF7!important;
   display:flex!important; align-items:center!important; justify-content:center!important; transition:.14s ease!important;
 }
-.st-key-utility_toolbar .stButton > button:hover { background:rgba(117,160,205,.10)!important; color:#F4FBFF!important; transform:none!important; }
+.st-key-utility_toolbar .stButton > button:hover { background:rgba(117,160,205,.07)!important; color:#F4FBFF!important; transform:none!important; }
 .st-key-utility_toolbar .stButton > button:focus-visible { outline:1px solid rgba(93,245,255,.52)!important; outline-offset:1px!important; }
 .st-key-utility_toolbar .stButton > button > div {
   position:absolute!important; inset:0!important; width:100%!important; height:100%!important;
@@ -304,18 +306,18 @@ hr { border-color:rgba(140,175,215,.12)!important; }
 .st-key-top_settings .stButton > button p { display:none!important; width:0!important; height:0!important; margin:0!important; padding:0!important; }
 .st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
   position:static!important; transform:none!important; display:flex!important; align-items:center!important; justify-content:center!important;
-  width:1.28rem!important; height:1.28rem!important; min-width:1.28rem!important; line-height:1!important;
-  font-size:1.28rem!important; margin:0!important; padding:0!important; text-align:center!important;
+  width:1.14rem!important; height:1.14rem!important; min-width:1.14rem!important; line-height:1!important;
+  font-size:1.14rem!important; margin:0!important; padding:0!important; text-align:center!important;
 }
-.st-key-top_language .stButton > button { border-radius:9px!important; }
+.st-key-top_language .stButton > button { border-radius:7px!important; }
 .st-key-top_language .stButton > button p {
   display:flex!important; align-items:center!important; justify-content:center!important; margin:0!important; padding:0!important;
-  width:100%!important; height:100%!important; text-align:center!important; line-height:1!important; font-size:.78rem!important; font-weight:750!important; white-space:nowrap!important;
+  width:100%!important; height:100%!important; text-align:center!important; line-height:1!important; font-size:.72rem!important; font-weight:750!important; white-space:nowrap!important;
 }
 @media(max-width:700px){
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:2.85rem!important;width:2.85rem!important;min-width:2.85rem!important;max-width:2.85rem!important;}
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.25rem!important;width:2.25rem!important;min-width:2.25rem!important;max-width:2.25rem!important;}
-  .st-key-utility_toolbar .stButton>button{height:2.25rem!important;min-height:2.25rem!important;}
+  .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:2.55rem!important;width:2.55rem!important;min-width:2.55rem!important;max-width:2.55rem!important;}
+  .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.05rem!important;width:2.05rem!important;min-width:2.05rem!important;max-width:2.05rem!important;}
+  .st-key-utility_toolbar .stButton>button{height:2.05rem!important;min-height:2.05rem!important;}
 }
 /* Manual composer stays visually attached to the conversation. The actual text entry
    is a Streamlit form so Enter and Send behave identically; the suggestion lives beside it. */
@@ -892,7 +894,7 @@ def render_profile(profile: dict, state=None) -> None:
     st.markdown(profile_html(profile), unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     c1.progress(max(0.0, min(1.0, profile.get("patience", 0) / 100)))
-    c1.caption(f"{L('Patience', '耐心度')} · {profile.get('patience', 0)}/100")
+    c1.caption(f"{L('Patience', '耐心度')} · {max(0, int(profile.get('patience', 0)))}/100")
     c2.progress(max(0.0, min(1.0, profile.get("trust", 0) / 100)))
     c2.caption(f"{L('Trust in company', '对公司的信任')} · {profile.get('trust', 0)}/100")
     satisfaction = float(getattr(state, "customer_satisfaction", 50.0)) if state is not None else 50.0
@@ -1147,15 +1149,20 @@ def suggested_customer_prompt(domain: str, state) -> str:
 
     action = str(getattr(state, "recommended_action_code", "") or "")
     if action == "act_on_root_cause":
-        return L(
-            "That explanation makes sense. Please go ahead with the concrete fix you just described and let me know when the system updates.",
-            "这个解释说得通。请直接按你刚才说的方案处理，系统更新后告诉我结果。",
-        )
+        action_moves = [
+            L("That explanation makes sense. Please go ahead with the concrete fix you just described and let me know when the system updates.", "这个解释说得通。请直接按你刚才说的方案处理，系统更新后告诉我结果。"),
+            L("Yes, please apply that fix now. I'll confirm what I see once the change reaches my side.", "可以，请现在直接执行这个修复。我会在变化同步到我这边后确认结果。"),
+            L("Go ahead with the remediation. I don't need another explanation unless something blocks the change.", "请直接进行修复。如果没有新的阻塞，就不需要再重复解释了。"),
+            L("Please proceed with the system-side action and tell me the result once it completes.", "请继续执行系统侧操作，完成后直接告诉我结果。"),
+        ]
+        return action_moves[turn_count % len(action_moves)]
     if action == "avoid_repetition":
-        return L(
-            "I've already completed those steps, so please skip the repeats and move to the next system-side check.",
-            "这些步骤我已经做过了，请不要再重复，让我们直接进入下一项系统侧检查。",
-        )
+        repeat_moves = [
+            L("I've already completed those steps, so please skip the repeats and move to the next system-side check.", "这些步骤我已经做过了，请不要再重复，让我们直接进入下一项系统侧检查。"),
+            L("Let's use the results from the troubleshooting I've already done and continue from there.", "请直接沿用我已经完成的排查结果，从那里继续处理。"),
+            L("I don't want to repeat the same checks again. Please move to the next action that can actually change the outcome.", "我不想再重复相同检查了。请进入真正能改变结果的下一步操作。"),
+        ]
+        return repeat_moves[turn_count % len(repeat_moves)]
     if state.conflicts:
         conflict_moves = [
             L("That still doesn't match what I see. Please verify the authoritative record and resolve the system-side mismatch before we move on.", "这还是和我看到的不一致。请核对权威记录，并先把系统侧的不一致处理掉再继续。"),
@@ -1241,6 +1248,46 @@ def render_start_here(domains: list[str]) -> None:
             st.markdown(f'<div class="j-domain"><strong>{html.escape(display_domain(domain))}</strong><span>{html.escape(domain_description(domain))}</span></div>', unsafe_allow_html=True)
 
 
+def render_post_session_actions(state, profile: dict, domain: str, channel_label: str, *, mode: str) -> None:
+    """Render post-session analysis and PDF export after a conversation ends."""
+    if not state.session_ended:
+        return
+    st.markdown(L("#### Conversation wrap-up", "#### 对话结束总结"))
+    analysis_key = f"conversation_analysis_{state.session_id}"
+    provider_key = f"conversation_analysis_provider_{state.session_id}"
+    a1, a2 = st.columns(2)
+    with a1:
+        if st.button(L("Analyze conversation", "分析对话"), key=f"analyze_{state.session_id}", use_container_width=True):
+            with st.spinner(L("Analyzing conversation…", "正在分析对话…")):
+                cfg = _ai_runtime()
+                analysis, analysis_provider = analyze_conversation_summary(
+                    transcript=state.transcript, domain=domain, channel=CHANNELS[channel_label]["slug"],
+                    profile=profile, satisfaction=state.customer_satisfaction, conflicts=len(state.conflicts),
+                    api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL,
+                    timeout_s=cfg["timeout_ms"] / 1000.0, language=_language_prompt_name(),
+                )
+                st.session_state[analysis_key] = analysis
+                st.session_state[provider_key] = analysis_provider
+                st.rerun()
+    analysis_text = st.session_state.get(analysis_key, "")
+    pdf_bytes = build_conversation_pdf(
+        transcript=state.transcript, profile=profile, domain=display_domain(domain), channel=display_channel(channel_label),
+        session_id=state.session_id, satisfaction=state.customer_satisfaction, phase=state.session_phase,
+        language=_language_prompt_name(), analysis=analysis_text or None,
+    )
+    with a2:
+        st.download_button(
+            L("Save conversation as PDF", "将对话保存为 PDF"), data=pdf_bytes,
+            file_name=f"jspace_{mode}_{state.session_id}.pdf", mime="application/pdf",
+            key=f"download_pdf_{state.session_id}", use_container_width=True,
+        )
+    if analysis_text:
+        st.markdown(analysis_text)
+        provider = st.session_state.get(provider_key, "")
+        if provider:
+            st.caption(L("Analysis provider · ", "分析来源 · ") + provider)
+
+
 def process_scenario_turn(scenario, state, step_index: int, channel_label: str, conversation_slot) -> bool:
     epoch = int(st.session_state.get("generation_epoch", 0))
     step = scenario.steps[step_index]
@@ -1294,6 +1341,9 @@ def process_manual_turn(state, profile, domain: str, channel_label: str, prompt:
         return False
     append_agent_reply(state, reply, provider)
     update_customer_relationship(profile, state, reply, provider)
+    if float(profile.get("patience", 0)) < 0:
+        state.session_phase = "ended"
+        state.session_ended = True
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
     return True
 
@@ -1418,6 +1468,7 @@ if scenario_tab.open:
                         st.info(L("Practice session ended by the user. The app does not claim that the unresolved case was resolved.", "练习会话已由用户结束；应用不会把仍未解决的问题错误标记为已解决。"))
                     else:
                         st.success(L("Conversation closed naturally after confirmed resolution and the customer's final check-in.", "问题确认解决并完成最后确认后，对话已自然结束。"))
+                    render_post_session_actions(state, scenario.customer_profile, scenario.domain, live_channel, mode="scenario")
 
             with workspace_col:
                 render_workspace(state, show_coaching=True)
@@ -1510,7 +1561,7 @@ if manual_tab.open:
                                     )
                                     st.button(
                                         L("Use prompt", "填入输入框"),
-                                        key="use_manual_suggestion",
+                                        key=f"use_manual_suggestion_{sum(1 for r in manual_state.transcript if r.get('role') == 'agent')}",
                                         use_container_width=True,
                                         help=L("Fill the chat box immediately; then press Enter or Send.", "立即填入聊天框，然后按 Enter 或点击发送。"),
                                         on_click=_queue_manual_suggestion,
@@ -1577,7 +1628,11 @@ if manual_tab.open:
                         st.session_state.manual_state_v06 = manual_state
                         st.rerun()
                 else:
-                    st.success(L("Session ended. Start/reset a session whenever you want to practice another conversation.", "会话已结束。需要练习新的对话时，可以随时开始或重置会话。"))
+                    if float(manual_profile.get("patience", 0)) < 0:
+                        st.warning(L("The customer ended the conversation because their patience was exhausted.", "客户耐心已经耗尽，因此主动结束了本次对话。"))
+                    else:
+                        st.success(L("Session ended. Start/reset a session whenever you want to practice another conversation.", "会话已结束。需要练习新的对话时，可以随时开始或重置会话。"))
+                    render_post_session_actions(manual_state, manual_profile, active_manual_domain, active_manual_channel, mode="manual")
             with workspace_col:
                 render_workspace(manual_state, show_coaching=False)
 

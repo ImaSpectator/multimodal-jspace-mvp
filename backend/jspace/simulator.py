@@ -78,8 +78,9 @@ def _update_satisfaction(state: SessionState, reply: str) -> None:
 def update_customer_relationship(profile: dict, state: SessionState, reply: str, provider: str = "") -> None:
     """Update patience/trust from conversation quality without touching satisfaction.
 
-    Patience starts at 100 and never increases: useful progress leaves it alone, while
-    repetition, fallbacks, and prolonged unresolved conflict consume it. Trust moves
+    Patience starts from the simulated customer profile and never increases: useful
+    progress leaves it alone, while repetition, fallbacks, and prolonged unresolved
+    conflict consume it. Trust moves
     more gently in either direction. A tiny deterministic jitter keeps sessions from
     feeling mechanically identical while keeping tests reproducible.
     """
@@ -111,7 +112,7 @@ def update_customer_relationship(profile: dict, state: SessionState, reply: str,
         patience_loss += 3.0 + min(3.0, max(0, agent_turns - 3) * 0.7)
     if not concrete_progress and agent_turns >= 4 and state.session_phase == "active":
         patience_loss += 1.5
-    profile["patience"] = int(round(max(0.0, min(100.0, float(profile.get("patience", 100)) - patience_loss))))
+    profile["patience"] = int(round(min(100.0, float(profile.get("patience", 85)) - patience_loss)))
 
     trust_delta = 0.0
     if state.session_phase in {"resolved", "closing"} or any(x in low for x in ["confirmed resolved", "issue is resolved", "已经解决", "确认已经解决"]):

@@ -1,2 +1,2 @@
-"""Current JSpace runtime used by the Streamlit v0.6.3 deployment."""
-RUNTIME_VERSION = "0.6.3"
+"""Current JSpace runtime used by the Streamlit application."""
+RUNTIME_VERSION = "1.2.0"

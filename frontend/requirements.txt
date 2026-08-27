@@ -2,3 +2,5 @@ streamlit>=1.62,<2
 pandas>=2.0,<3
 pydantic>=2.7,<3
 openai>=1.68,<3
+
+reportlab>=4.2,<5
