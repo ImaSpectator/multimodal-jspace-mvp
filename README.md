@@ -1,4 +1,4 @@
-# JSpace Live — v0.8.2
+# JSpace Live — v0.8.2.2
 
 ## Updates
 

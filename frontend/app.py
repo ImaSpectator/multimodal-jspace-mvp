@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import inspect
 import os
 import sys
 import urllib.parse
@@ -39,7 +40,7 @@ from backend.jspace.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.8.2.1-tencent-multimodal"
+APP_VERSION = "0.8.2.2-tencent-multimodal"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -279,6 +280,21 @@ TOKENHUB_VIDEO_MODEL = _secret("TOKENHUB_VIDEO_MODEL", DEFAULT_VIDEO_MODEL) or D
 TOKENHUB_BASE_URL = _secret("TOKENHUB_BASE_URL", DEFAULT_BASE_URL) or DEFAULT_BASE_URL
 PUBLIC_APP_URL = _secret("PUBLIC_APP_URL", "") or ""
 AI_CONNECTED = bool(TOKENHUB_API_KEY)
+
+
+def _accepts_kwarg(func, name: str) -> bool:
+    """Return True when the loaded backend helper accepts a keyword.
+
+    Streamlit Cloud can briefly run a new frontend against cached/stale backend
+    modules during deployment. Keeping the UI tolerant of older helper signatures
+    prevents a visible TypeError while the synchronized package rolls out.
+    """
+    try:
+        params = inspect.signature(func).parameters
+        return name in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+    except (TypeError, ValueError):
+        return False
+
 
 DOMAIN_ZH = {
     "account_access": "账户访问", "banking_fraud": "银行卡欺诈", "delivery": "配送",
@@ -732,13 +748,16 @@ def render_conversation(transcript: list[dict], channel_label: str, *, typing: b
 def make_responder(channel_label: str, media: list[dict] | None = None):
     def responder(state, profile, domain):
         cfg = _ai_runtime()
-        return generate_support_reply(
-            state, profile, domain, api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL,
+        kwargs = dict(
+            api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL,
             fallback=state.last_response, channel=CHANNELS[channel_label]["slug"], media=media,
             timeout_s=cfg["timeout_ms"] / 1000.0, max_attempts=cfg["max_attempts"],
             history_turns=cfg["history_turns"], max_output_tokens=cfg["max_output_tokens"],
-            reply_sentences=cfg["reply_sentences"], language=_language_prompt_name(),
+            reply_sentences=cfg["reply_sentences"],
         )
+        if _accepts_kwarg(generate_support_reply, "language"):
+            kwargs["language"] = _language_prompt_name()
+        return generate_support_reply(state, profile, domain, **kwargs)
     return responder
 
 
@@ -747,13 +766,16 @@ def stream_agent_reply(state, profile, domain: str, channel_label: str, conversa
     cfg = _ai_runtime()
     final_text, final_provider = state.last_response or L("I can help with that.", "我可以帮你处理这个问题。"), "Local simulation"
     got_text = False
-    for partial, provider, done in stream_support_reply(
-        state, profile, domain, api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL,
+    stream_kwargs = dict(
+        api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL,
         fallback=state.last_response, channel=CHANNELS[channel_label]["slug"], media=media,
         timeout_s=cfg["timeout_ms"] / 1000.0, max_attempts=cfg["max_attempts"],
         history_turns=cfg["history_turns"], max_output_tokens=cfg["max_output_tokens"],
-        reply_sentences=cfg["reply_sentences"], language=_language_prompt_name(),
-    ):
+        reply_sentences=cfg["reply_sentences"],
+    )
+    if _accepts_kwarg(stream_support_reply, "language"):
+        stream_kwargs["language"] = _language_prompt_name()
+    for partial, provider, done in stream_support_reply(state, profile, domain, **stream_kwargs):
         if epoch is not None and int(st.session_state.get("generation_epoch", 0)) != epoch:
             return None, "Canceled"
         final_text, final_provider = partial, provider
@@ -972,27 +994,16 @@ if scenario_tab.open:
                 scenario_provider = L("Curated scenario · instant", "预设场景 · 即时")
                 if AI_CONNECTED and (st.session_state.get("settings_scenario_ai", True) or _is_zh()):
                     cfg = _ai_runtime()
-                    try:
-                        scenario, scenario_provider = enhance_scenario_with_deepseek(
-                            scenario,
-                            api_key=TOKENHUB_API_KEY,
-                            model=TOKENHUB_MODEL,
-                            base_url=TOKENHUB_BASE_URL,
-                            channel=CHANNELS[channel_label]["slug"],
-                            timeout_s=cfg["scenario_timeout_ms"] / 1000.0,
-                            language=_language_prompt_name(),
-                        )
-                    except TypeError:
-                        # Backward-compatible retry in case a stale deployment still has the
-                        # earlier helper signature without the language keyword.
-                        scenario, scenario_provider = enhance_scenario_with_deepseek(
-                            scenario,
-                            api_key=TOKENHUB_API_KEY,
-                            model=TOKENHUB_MODEL,
-                            base_url=TOKENHUB_BASE_URL,
-                            channel=CHANNELS[channel_label]["slug"],
-                            timeout_s=cfg["scenario_timeout_ms"] / 1000.0,
-                        )
+                    rewrite_kwargs = dict(
+                        api_key=TOKENHUB_API_KEY,
+                        model=TOKENHUB_MODEL,
+                        base_url=TOKENHUB_BASE_URL,
+                        channel=CHANNELS[channel_label]["slug"],
+                        timeout_s=cfg["scenario_timeout_ms"] / 1000.0,
+                    )
+                    if _accepts_kwarg(enhance_scenario_with_deepseek, "language"):
+                        rewrite_kwargs["language"] = _language_prompt_name()
+                    scenario, scenario_provider = enhance_scenario_with_deepseek(scenario, **rewrite_kwargs)
                 scenario = prepare_scenario_for_channel(scenario, channel_label)
             if int(st.session_state.get("generation_epoch", 0)) == epoch:
                 st.session_state.live_scenario = scenario
