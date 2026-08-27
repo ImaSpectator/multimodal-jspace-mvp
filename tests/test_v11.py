@@ -81,3 +81,11 @@ def test_v11_media_evidence_requests_selected_language():
     assert 'Write every summary in {output_language}' in source
     assert 'Write all three values in {output_language}' in source
     assert 'temperature": 0.55' in source
+
+
+def test_v11_relationship_import_is_backward_compatible():
+    source = _source()
+    assert 'try:  # v1.1 backend; tolerate a stale Streamlit module during redeploy.' in source
+    assert 'except ImportError' in source
+    assert '_backend_update_customer_relationship = None' in source
+    assert 'update_customer_relationship,' not in source.split('from backend.jspace.simulator import (', 1)[1].split(')', 1)[0]

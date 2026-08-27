@@ -37,8 +37,56 @@ from backend.jspace.simulator import (  # noqa: E402
     end_scenario_session,
     new_manual_state,
     new_scenario_state,
-    update_customer_relationship,
 )
+
+try:  # v1.1 backend; tolerate a stale Streamlit module during redeploy.
+    from backend.jspace.simulator import update_customer_relationship as _backend_update_customer_relationship  # noqa: E402
+except ImportError:  # pragma: no cover - compatibility path for stale deployments
+    _backend_update_customer_relationship = None
+
+
+def update_customer_relationship(profile: dict, state, reply: str, provider: str = "") -> None:
+    """Update Patience/Trust even when an older backend is temporarily loaded."""
+    if _backend_update_customer_relationship is not None:
+        _backend_update_customer_relationship(profile, state, reply, provider)
+        return
+    if not profile:
+        return
+    low = (reply or "").lower()
+    provider_low = (provider or "").lower()
+    agent_turns = sum(1 for row in getattr(state, "transcript", []) if row.get("role") == "agent")
+    concrete_progress = any(token in low for token in [
+        "verified", "confirmed", "found", "identified", "root cause", "fixed", "resolved", "updated",
+        "removed", "unlocked", "reissued", "refunded", "activated", "next step", "i'll apply", "i will apply",
+        "已经核实", "已经确认", "查到", "根因", "已解决", "已修复", "已更新", "下一步", "我会处理", "已经处理",
+    ])
+    asks_repeat = any(token in low for token in [
+        "try again", "restart again", "reset again", "repeat the", "do that again",
+        "再试一次", "再重启", "再重置", "重复刚才",
+    ])
+    fallback = "fallback" in provider_low or "simulation" in provider_low
+    prolonged_conflict = bool(getattr(state, "conflicts", [])) and agent_turns >= 3 and getattr(state, "session_phase", "active") not in {"resolved", "closing", "ended"}
+    patience_loss = (6.0 if fallback else 0.0) + (7.0 if asks_repeat else 0.0)
+    if prolonged_conflict and not concrete_progress:
+        patience_loss += 3.0 + min(3.0, max(0, agent_turns - 3) * 0.7)
+    if not concrete_progress and agent_turns >= 4 and getattr(state, "session_phase", "active") == "active":
+        patience_loss += 1.5
+    profile["patience"] = int(round(max(0.0, min(100.0, float(profile.get("patience", 100)) - patience_loss))))
+    trust_delta = 0.0
+    if getattr(state, "session_phase", "active") in {"resolved", "closing"} or any(x in low for x in ["confirmed resolved", "issue is resolved", "已经解决", "确认已经解决"]):
+        trust_delta += 4.0
+    elif concrete_progress:
+        trust_delta += 1.8
+    if fallback:
+        trust_delta -= 3.5
+    if asks_repeat:
+        trust_delta -= 2.5
+    if prolonged_conflict and not concrete_progress:
+        trust_delta -= 1.5
+    if abs(trust_delta) > 0.01:
+        trust_delta += ((sum(ord(ch) for ch in (reply or "")) + agent_turns) % 3 - 1) * 0.6
+    profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
+
 
 APP_VERSION = "1.1.0-behavior-polish"
 
