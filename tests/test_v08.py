@@ -294,9 +294,32 @@ def test_frontend_is_tencent_multimodal_and_has_shortcut_guard():
 
 def test_top_controls_precede_hero_in_source():
     source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
-    controls = source.index('with st.popover("❔"')
+    controls = source.index('with st.container(key="utility_toolbar")')
     hero = source.index('<div class="j-hero">')
     assert controls < hero
+
+
+def test_v081_toolbar_uses_compact_material_buttons_and_dialogs():
+    source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
+    assert '@st.dialog("Help"' in source
+    assert '@st.dialog("Share"' in source
+    assert '@st.dialog("Settings"' in source
+    for icon in (":material/help:", ":material/share:", ":material/refresh:", ":material/settings:"):
+        assert icon in source
+    assert 'with st.popover("❔"' not in source
+    assert 'with st.popover("↗"' not in source
+    assert 'with st.popover("⚙"' not in source
+
+
+def test_v081_readme_profiles_are_current_and_no_secret_setup_section():
+    text = (Path(__file__).parents[1] / "README.md").read_text()
+    assert "# JSpace Live — v0.8.1" in text
+    assert "**Fast** | 12 seconds | Up to 2 | 4 recent messages | 12 seconds" in text
+    assert "**Balanced** | 20 seconds | Up to 2 | 6 recent messages | 20 seconds" in text
+    assert "**Concise** — up to 120 output tokens" in text
+    assert "**Standard** — up to 180 output tokens" in text
+    assert "Streamlit Secrets" not in text
+    assert 'TOKENHUB_API_KEY = "YOUR_PRIVATE_TOKENHUB_KEY"' not in text
 
 
 def test_requirements_use_openai_not_google_genai():

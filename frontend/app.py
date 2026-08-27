@@ -39,7 +39,7 @@ from backend.jspace.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.8.0-tencent-multimodal"
+APP_VERSION = "0.8.1-tencent-multimodal"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -182,7 +182,37 @@ a.anchor-link, [data-testid="stMarkdownContainer"] h1 > a, [data-testid="stMarkd
 hr { border-color:rgba(140,175,215,.12)!important; }
 @media(max-width:1000px){ .j-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.j-node-grid{grid-template-columns:1fr 1fr}.j-title{font-size:1.72rem}.j-msg{max-width:94%} }
 
-.j-top-icon [data-testid="stPopover"] > button, .j-top-icon button { min-height:2.15rem!important; height:2.15rem!important; padding:.25rem .45rem!important; border-radius:11px!important; font-size:1rem!important; }
+/* Compact top-right utility toolbar. Each action is a true square icon button;
+   dialogs replace popovers so there are no oversized chevrons or uneven controls. */
+.st-key-utility_toolbar { margin-top:-.15rem; margin-bottom:.38rem; }
+.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center; gap:.42rem!important; }
+.st-key-utility_toolbar [data-testid="column"]:first-child { flex:1 1 auto!important; min-width:0!important; }
+.st-key-utility_toolbar [data-testid="column"]:not(:first-child) {
+  flex:0 0 2.45rem!important; width:2.45rem!important; min-width:2.45rem!important; max-width:2.45rem!important;
+}
+.st-key-utility_toolbar .stButton { margin:0!important; width:2.45rem!important; }
+.st-key-utility_toolbar .stButton > button {
+  width:2.40rem!important; min-width:2.40rem!important; max-width:2.40rem!important;
+  height:2.40rem!important; min-height:2.40rem!important; padding:0!important;
+  border-radius:12px!important; border:1px solid rgba(93,245,255,.24)!important;
+  background:linear-gradient(145deg,rgba(14,29,49,.90),rgba(8,17,31,.90))!important;
+  color:#DFF8FF!important; box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 7px 20px rgba(0,0,0,.16)!important;
+  display:flex!important; align-items:center!important; justify-content:center!important; transition:.16s ease!important;
+}
+.st-key-utility_toolbar .stButton > button:hover {
+  transform:translateY(-1px); border-color:rgba(93,245,255,.55)!important;
+  background:linear-gradient(145deg,rgba(18,43,65,.96),rgba(13,25,45,.96))!important;
+  box-shadow:0 8px 24px rgba(58,177,220,.12),inset 0 1px 0 rgba(255,255,255,.06)!important;
+}
+.st-key-utility_toolbar .stButton > button:active { transform:translateY(0); }
+.st-key-utility_toolbar .stButton > button p { margin:0!important; line-height:1!important; font-size:0!important; }
+.st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
+  font-size:1.22rem!important; width:1.22rem!important; height:1.22rem!important; margin:0!important;
+}
+@media(max-width:700px){
+  .st-key-utility_toolbar [data-testid="column"]:not(:first-child){flex-basis:2.25rem!important;width:2.25rem!important;min-width:2.25rem!important;max-width:2.25rem!important;}
+  .st-key-utility_toolbar .stButton,.st-key-utility_toolbar .stButton>button{width:2.20rem!important;min-width:2.20rem!important;max-width:2.20rem!important;height:2.20rem!important;min-height:2.20rem!important;}
+}
 #scenario-live-anchor { scroll-margin-top: 20px; }
 
 </style>
@@ -303,51 +333,71 @@ def reset_sessions() -> None:
             del st.session_state[key]
 
 
-# Compact utility controls in the top-right.
-filler, u1, u2, u3, u4 = st.columns([12.0, .46, .46, .46, .46], gap="small")
-with u1:
-    with st.popover("❔", help="Help"):
-        st.markdown("**Quick guide**")
-        st.write("Scenario Lab generates a case and reveals it turn by turn. Manual mode lets you play the customer until you end the session.")
-        st.write("Multimodal Mix routes text/images to DeepSeek Vision, audio to Hy-ASR transcription, video to YT-VITA, then combines the resulting evidence with company-system data.")
-with u2:
-    with st.popover("↗", help="Share"):
-        st.markdown("**Email this experience**")
-        share_url = st.text_input("Public app link", value=PUBLIC_APP_URL, placeholder="https://your-app.streamlit.app", key="share_url")
-        recipient = st.text_input("Recipient email", placeholder="name@example.com", key="share_email")
-        if share_url and recipient and "@" in recipient:
-            subject = urllib.parse.quote("Try JSpace Live")
-            body = urllib.parse.quote(f"I wanted to share this JSpace customer-service experience with you:\n\n{share_url}")
-            st.link_button("Email link", f"mailto:{urllib.parse.quote(recipient)}?subject={subject}&body={body}", use_container_width=True)
-            st.caption("This opens your email app with the recipient and website link filled in; you press Send there.")
-        elif recipient and "@" not in recipient:
-            st.caption("Enter a valid email address.")
-with u3:
-    if st.button("↻", help="Reset current sessions", key="top_reset"):
-        _bump_generation_epoch()
-        reset_sessions()
-        st.rerun()
-with u4:
-    with st.popover("⚙", help="Settings"):
-        st.markdown("**Conversation settings**")
-        st.selectbox("AI response profile", ["Fast", "Balanced"], key="settings_speed", help="Fast uses a 12-second maximum TokenHub request and compact context. The deadline is only a cap; streaming can respond much sooner. Balanced allows more time/context.")
-        st.selectbox("Agent reply length", ["Concise", "Standard"], key="settings_reply")
-        st.toggle("Use DeepSeek to vary scenario wording", key="settings_scenario_ai", help="Turn this off for near-instant curated scenario generation.")
-        st.toggle("Auto-jump to conversation after generation", key="settings_auto_scroll")
-        cfg = _ai_runtime()
-        st.caption(f"Text/image: {TOKENHUB_MODEL} · Audio: {TOKENHUB_AUDIO_MODEL} · Video: {TOKENHUB_VIDEO_MODEL}")
-        st.caption(f"DeepSeek timeout: {cfg['timeout_ms']/1000:.0f}s/attempt · history: {cfg['history_turns']} messages")
-        if st.button("Test DeepSeek connection", use_container_width=True, key="test_deepseek"):
-            with st.spinner("Testing…"):
-                ok, detail = probe_deepseek(api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL, timeout_s=12.0)
-            if ok:
-                st.success(f"Connected · {TOKENHUB_MODEL}")
-            else:
-                st.error(detail)
-        components.html(
-            """<button onclick="window.parent.print()" style="width:100%;padding:8px 12px;border-radius:10px;border:1px solid #4a7891;background:#0d1b2b;color:#eaf7ff;cursor:pointer">Print this view</button>""",
-            height=46,
-        )
+# Compact utility controls in the top-right. Dialogs keep the toolbar itself
+# visually minimal and avoid Streamlit popover chevrons/oversized buttons.
+@st.dialog("Help", width="small")
+def _help_dialog() -> None:
+    st.markdown("**Quick guide**")
+    st.write("Scenario Lab generates a case and reveals it turn by turn. Manual mode lets you play the customer until you end the session.")
+    st.write("Multimodal Mix routes text/images to DeepSeek Vision, audio to Hy-ASR transcription, video to YT-VITA, then combines the resulting evidence with company-system data.")
+
+
+@st.dialog("Share", width="small")
+def _share_dialog() -> None:
+    st.markdown("**Email this experience**")
+    share_url = st.text_input("Public app link", value=PUBLIC_APP_URL, placeholder="https://your-app.streamlit.app", key="share_url")
+    recipient = st.text_input("Recipient email", placeholder="name@example.com", key="share_email")
+    if share_url and recipient and "@" in recipient:
+        subject = urllib.parse.quote("Try JSpace Live")
+        body = urllib.parse.quote(f"I wanted to share this JSpace customer-service experience with you:\n\n{share_url}")
+        st.link_button("Email link", f"mailto:{urllib.parse.quote(recipient)}?subject={subject}&body={body}", width="stretch")
+        st.caption("This opens your email app with the recipient and website link filled in; you press Send there.")
+    elif recipient and "@" not in recipient:
+        st.caption("Enter a valid email address.")
+
+
+@st.dialog("Settings", width="small")
+def _settings_dialog() -> None:
+    st.markdown("**Conversation settings**")
+    st.selectbox(
+        "AI response profile", ["Fast", "Balanced"], key="settings_speed",
+        help="Fast uses a 12-second DeepSeek attempt cap and 4 recent messages. Balanced uses a 20-second cap and 6 recent messages.",
+    )
+    st.selectbox("Agent reply length", ["Concise", "Standard"], key="settings_reply")
+    st.toggle("Use DeepSeek to vary scenario wording", key="settings_scenario_ai", help="Turn this off for near-instant curated scenario generation.")
+    st.toggle("Auto-jump to conversation after generation", key="settings_auto_scroll")
+    cfg = _ai_runtime()
+    st.caption(f"Text/image: {TOKENHUB_MODEL} · Audio: {TOKENHUB_AUDIO_MODEL} · Video: {TOKENHUB_VIDEO_MODEL}")
+    st.caption(f"DeepSeek: {cfg['timeout_ms']/1000:.0f}s/attempt · {cfg['history_turns']} recent messages · max {cfg['max_attempts']} attempts")
+    if st.button("Test DeepSeek connection", width="stretch", key="test_deepseek"):
+        with st.spinner("Testing…"):
+            ok, detail = probe_deepseek(api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL, timeout_s=12.0)
+        if ok:
+            st.success(f"Connected · {TOKENHUB_MODEL}")
+        else:
+            st.error(detail)
+    components.html(
+        """<button onclick="window.parent.print()" style="width:100%;padding:8px 12px;border-radius:10px;border:1px solid #4a7891;background:#0d1b2b;color:#eaf7ff;cursor:pointer">Print this view</button>""",
+        height=46,
+    )
+
+
+with st.container(key="utility_toolbar"):
+    spacer, u1, u2, u3, u4 = st.columns([1, .04, .04, .04, .04], gap="small", vertical_alignment="center")
+    with u1:
+        if st.button("\u200b", icon=":material/help:", help="Help", key="top_help", width="stretch"):
+            _help_dialog()
+    with u2:
+        if st.button("\u200b", icon=":material/share:", help="Share", key="top_share", width="stretch"):
+            _share_dialog()
+    with u3:
+        if st.button("\u200b", icon=":material/refresh:", help="Reset current sessions", key="top_reset", width="stretch"):
+            _bump_generation_epoch()
+            reset_sessions()
+            st.rerun()
+    with u4:
+        if st.button("\u200b", icon=":material/settings:", help="Settings", key="top_settings", width="stretch"):
+            _settings_dialog()
 
 st.markdown("<div style=\"height:.65rem\"></div>", unsafe_allow_html=True)
 
