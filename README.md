@@ -1,15 +1,21 @@
-# JSpace Live — v0.8.1
+# JSpace Live — v0.8.2
 
 ## Updates
 
-- Tencent multimodal routing uses one shared TokenHub connection across the active model routes.
+- Manual Multimodal AI has a redesigned composer directly beneath the conversation window.
+- The chat composer is now a real form: **Enter** and **Send** submit the same turn.
+- **Use prompt** immediately fills the customer-message box without requiring the user to focus the input first.
+- The suggested prompt sits in a compact panel to the right of the composer, away from the Live JSpace workspace.
+- Scenario Lab and Manual conversations use a fixed-height **scrollable transcript** and automatically follow the newest turn.
+- Scenario Lab shows turn progress so it is clear that the case is continuing rather than frozen.
+- Added a global **English / 中文** switch in the top-right toolbar. Navigation, controls, help/settings copy, scenario wording, suggested prompts, generated customer turns, and AI responses follow the selected language.
+- Switching language restarts the active practice session so one transcript does not mix English and Chinese generated turns.
+- The top-right Help, Share, Reset, and Settings icons use fixed square buttons with explicitly centered Material glyphs.
 - Text and screenshots/images use `deepseek/deepseek-v4-flash-vision-exp`.
-- Standalone audio uses `hy-asr-3.0-preview` for transcription. Manual mode does not claim to detect raw vocal emotion; affect can only be inferred from the transcript wording.
+- Standalone audio uses `hy-asr-3.0-preview` for transcription. Manual mode does not claim to detect raw vocal emotion; affect can only be inferred from typed/transcribed wording.
 - Video uses `youtu-vita` for visual + audio-track understanding and converts its observations into JSpace evidence.
 - DeepSeek remains the final customer-service responder and reasons over the selected Top-K JSpace concepts from all modalities.
-- Media-only turns are supported, and unavailable media analysis is shown explicitly instead of fabricated.
 - DeepSeek replies stream with thinking disabled, bounded retries, repeat-response protection, provider labels, and rerun/double-click guards.
-- v0.8.1 redesigns Help, Share, Reset, and Settings as a small consistent top-right icon toolbar with modal dialogs instead of oversized popovers.
 - Plain `R` and `C` Streamlit developer shortcuts remain blocked outside text inputs.
 
 ## Speed profiles

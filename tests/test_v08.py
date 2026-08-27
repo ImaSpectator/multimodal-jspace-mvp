@@ -196,7 +196,7 @@ def test_image_analysis_uses_image_url_data_uri(monkeypatch):
     assert any(part.get("type") == "image_url" and part["image_url"]["url"].startswith("data:image/png;base64,") for part in content)
 
 
-def test_audio_uses_hyasr_transcription(monkeypatch):
+def test_audio_uses_wand_asr_transcription(monkeypatch):
     class FakeResponse:
         def __enter__(self):
             return self
@@ -299,7 +299,7 @@ def test_top_controls_precede_hero_in_source():
     assert controls < hero
 
 
-def test_v081_toolbar_uses_compact_material_buttons_and_dialogs():
+def test_v082_toolbar_uses_compact_centered_material_buttons_and_dialogs():
     source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
     assert '@st.dialog("Help"' in source
     assert '@st.dialog("Share"' in source
@@ -309,17 +309,43 @@ def test_v081_toolbar_uses_compact_material_buttons_and_dialogs():
     assert 'with st.popover("❔"' not in source
     assert 'with st.popover("↗"' not in source
     assert 'with st.popover("⚙"' not in source
+    assert 'transform:translate(-50%,-50%)!important' in source
+    assert 'key="top_language"' in source
 
 
-def test_v081_readme_profiles_are_current_and_no_secret_setup_section():
+def test_v082_manual_composer_scroll_and_bilingual_controls():
+    source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
+    assert 'with st.form("manual_chat_form"' in source
+    assert 'st.form_submit_button' in source
+    assert 'on_click=_use_manual_suggestion' in source
+    assert 'Fill the chat box immediately; then press Enter or Send.' in source
+    assert 'height:min(58vh,590px)' in source
+    assert 'overflow-y:scroll' in source
+    assert 'settings_auto_scroll' in source
+    assert 'ui_language' in source
+    assert 'Simplified Chinese' in source
+    assert 'Scenario progress' in source
+
+
+def test_v082_chinese_prompt_and_fallback_are_language_aware():
+    scenario, state = _state()
+    prompt = build_support_prompt(state, scenario.customer_profile, scenario.domain, language="Simplified Chinese")
+    assert "Reply entirely in Simplified Chinese" in prompt
+    fallback = _fallback_reply(state, language="Simplified Chinese")
+    assert any(ch in fallback for ch in "我会查核确认客户问题状态解决下一步")
+
+
+def test_v082_readme_profiles_are_current_and_no_secret_setup_section():
     text = (Path(__file__).parents[1] / "README.md").read_text()
-    assert "# JSpace Live — v0.8.1" in text
+    assert "# JSpace Live — v0.8.2" in text
     assert "**Fast** | 12 seconds | Up to 2 | 4 recent messages | 12 seconds" in text
     assert "**Balanced** | 20 seconds | Up to 2 | 6 recent messages | 20 seconds" in text
     assert "**Concise** — up to 120 output tokens" in text
     assert "**Standard** — up to 180 output tokens" in text
     assert "Streamlit Secrets" not in text
     assert 'TOKENHUB_API_KEY = "YOUR_PRIVATE_TOKENHUB_KEY"' not in text
+    assert "hy-asr-3.0-preview" in text
+    assert "English / 中文" in text
 
 
 def test_requirements_use_openai_not_google_genai():

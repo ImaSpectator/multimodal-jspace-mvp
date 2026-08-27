@@ -18,6 +18,11 @@ DEFAULT_MODEL = "deepseek/deepseek-v4-flash-vision-exp"
 DEFAULT_AUDIO_MODEL = "hy-asr-3.0-preview"
 DEFAULT_VIDEO_MODEL = "youtu-vita"
 DEFAULT_BASE_URL = "https://tokenhub.tencentmaas.com/v1"
+
+
+def _language_is_chinese(language: str | None) -> bool:
+    value = str(language or "").strip().lower()
+    return value.startswith(("zh", "chinese", "simplified chinese", "简体中文", "中文"))
 ALLOWED_EMOTIONS = {
     "calm", "neutral", "curious", "hopeful", "appreciative", "satisfied", "relieved",
     "uncertain", "confused", "anxious", "disappointed", "frustrated", "angry", "impatient",
@@ -67,6 +72,7 @@ def build_support_prompt(
     *,
     history_turns: int = 4,
     reply_sentences: int = 2,
+    language: str = "English",
 ) -> str:
     transcript = "\n".join(
         f"{row.get('role', 'unknown').upper()}: {row.get('text', '')}"
@@ -90,8 +96,13 @@ def build_support_prompt(
         f"\nPrevious agent reply that MUST NOT be repeated or lightly paraphrased:\n{previous_agent}\n"
         if previous_agent else ""
     )
+    language_rule = "Reply entirely in Simplified Chinese (简体中文)." if _language_is_chinese(language) else "Reply entirely in natural English."
     return f"""
 You are a customer-service support agent speaking through {channel}. Reply directly to the customer's newest message.
+
+Language:
+- {language_rule}
+- Keep customer-facing wording natural for that language. Do not mix languages unless the customer explicitly does so.
 
 Goals:
 - Resolve the problem while maximizing customer satisfaction through empathy, ownership, clarity, and useful action.
@@ -167,7 +178,7 @@ def _is_transient_error(exc: Exception) -> bool:
 
 
 def _normalize_text(text: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", text.lower())).strip()
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", text.lower(), flags=re.UNICODE)).strip()
 
 
 def _too_similar_to_previous(state: SessionState, candidate: str, *, threshold: float = 0.86) -> bool:
@@ -183,7 +194,7 @@ def _too_similar_to_previous(state: SessionState, candidate: str, *, threshold: 
     return SequenceMatcher(None, previous, current).ratio() >= threshold
 
 
-def _fallback_reply(state: SessionState, preferred: str | None = None) -> str:
+def _fallback_reply(state: SessionState, preferred: str | None = None, *, language: str = "English") -> str:
     """Contextual backup responder with enough variants to avoid visible loops."""
     previous_agents = [
         str(row.get("text", "")).strip()
@@ -194,7 +205,38 @@ def _fallback_reply(state: SessionState, preferred: str | None = None) -> str:
     if preferred and preferred not in previous_agents:
         return preferred
 
-    variants = {
+    chinese = _language_is_chinese(language)
+    if chinese:
+        variants = {
+            "resolve_conflict": [
+                "你看到的状态和公司系统记录仍然不一致。我正在核对真正决定结果的状态字段，这样可以明确告诉你具体还卡在哪里。",
+                "我还不能确认问题已经解决，因为两边记录仍有冲突。下一步我会核对权威状态和对应的阻塞原因。",
+                "目前前台显示与后台记录不一致。我会直接定位阻止流程完成的系统状态，不会让你重复已经做过的步骤。",
+            ],
+            "act_on_root_cause": [
+                "我已经定位到一个具体的底层阻塞原因。接下来会针对这个原因处理，而不是继续让你做通用排查。",
+                "现在已经有明确的根因方向，下一步应该是针对性修复，而不是让你再次重试。",
+                "我已经把问题缩小到一个具体阻塞点，接下来会根据这个状态采取修复动作。",
+            ],
+            "avoid_repetition": [
+                "你已经完成的步骤我都有记录，我不会让你再重复。接下来我会检查一个新的系统侧信号。",
+                "前面的排查结果我会保留在上下文里，下一步会做新的检查，而不是再次让你重试同样的步骤。",
+            ],
+            "confirm_resolution": [
+                "系统现在已经显示问题解决。结束前还有其他问题或需要我继续确认的地方吗？",
+                "我现在可以确认系统状态已经恢复正常。还有其他问题需要我一起处理吗？",
+            ],
+            "close_session": [
+                "很高兴这次问题已经处理好。感谢你联系支持，祝你今天顺利。",
+                "这边已经全部处理完成。感谢你的耐心，祝你有愉快的一天。",
+            ],
+            "default": [
+                "我会继续从当前状态往下排查，并给你一个具体的新信息或下一步，而不是重复之前的回答。",
+                "我已经保留了你刚才提供的信息，接下来会核对最能推进问题解决的系统状态。",
+            ],
+        }
+    else:
+        variants = {
         "resolve_conflict": [
             "What you’re seeing and the company record still disagree. I’m checking the specific status field that controls the outcome so I can tell you exactly what has to change.",
             "I haven’t confirmed this as resolved yet because the records still conflict. My next check is the authoritative status and the blocker attached to it.",
@@ -230,11 +272,11 @@ def _fallback_reply(state: SessionState, preferred: str | None = None) -> str:
             "I’m tracing the issue to the next verifiable point in the process so I can tell you what is actually preventing completion.",
         ],
     }
-    options = variants.get(state.recommended_action_code or "", [
+    options = variants.get(state.recommended_action_code or "", variants.get("default", [
         "I’m reviewing the current details so I can give you a new, useful next step without making you repeat yourself.",
         "I’m checking the latest state now and will focus the next step on what can actually move the issue forward.",
         "I’m comparing the latest evidence so I can answer your question directly and avoid recycling the same troubleshooting advice.",
-    ])
+    ]))
     # Choose the first variant not already used in this transcript.
     for option in options:
         if option not in previous_agents:
@@ -295,16 +337,17 @@ def generate_support_reply(
     history_turns: int = 4,
     max_output_tokens: int = 140,
     reply_sentences: int = 2,
+    language: str = "English",
 ) -> tuple[str, str]:
     """Return (reply, provider label) through Tencent TokenHub DeepSeek."""
-    local_reply = _fallback_reply(state, fallback)
+    local_reply = _fallback_reply(state, fallback, language=language)
     if not api_key:
         return local_reply, "Local simulation"
 
     client = _cached_client(api_key, base_url, timeout_s)
     base_prompt = build_support_prompt(
         state, customer_profile, domain, channel,
-        history_turns=history_turns, reply_sentences=reply_sentences,
+        history_turns=history_turns, reply_sentences=reply_sentences, language=language,
     )
     last_exc: Exception | None = None
     for attempt in range(1, max(1, max_attempts) + 1):
@@ -349,9 +392,10 @@ def stream_support_reply(
     history_turns: int = 4,
     max_output_tokens: int = 140,
     reply_sentences: int = 2,
+    language: str = "English",
 ) -> Iterator[tuple[str, str, bool]]:
     """Yield progressively growing DeepSeek output with bounded retry and repeat protection."""
-    local_reply = _fallback_reply(state, fallback)
+    local_reply = _fallback_reply(state, fallback, language=language)
     if not api_key:
         yield local_reply, "Local simulation", True
         return
@@ -359,7 +403,7 @@ def stream_support_reply(
     client = _cached_client(api_key, base_url, timeout_s)
     base_prompt = build_support_prompt(
         state, customer_profile, domain, channel,
-        history_turns=history_turns, reply_sentences=reply_sentences,
+        history_turns=history_turns, reply_sentences=reply_sentences, language=language,
     )
     last_exc: Exception | None = None
     previous = _normalize_text(_last_agent_reply(state))
@@ -514,6 +558,7 @@ def transcribe_audio_with_hyasr(
         return None, f"Hy-ASR HTTP {exc.code}: {body or exc.reason}"
     except Exception as exc:
         return None, f"Hy-ASR {type(exc).__name__}: {exc}"
+
 
 
 def analyze_video_with_youtuvita(
@@ -715,6 +760,7 @@ def enhance_scenario_with_deepseek(
     base_url: str = DEFAULT_BASE_URL,
     channel: str = "text messages",
     timeout_s: float = 12.0,
+    language: str = "English",
 ) -> tuple[GeneratedScenario, str]:
     """Rewrite controlled scenario language with DeepSeek without changing ground truth."""
     if not api_key:
@@ -722,8 +768,10 @@ def enhance_scenario_with_deepseek(
     try:
         client = _cached_client(api_key, base_url, timeout_s)
         base_turns = [s.customer_turn.text for s in scenario.steps]
+        language_rule = "Write title, problem_summary, and every turn entirely in Simplified Chinese (简体中文)." if _language_is_chinese(language) else "Write title, problem_summary, and every turn entirely in natural English."
         prompt = f"""
 Create a realistic customer-service simulation for this controlled case. Keep factual ground truth unchanged.
+Language requirement: {language_rule}
 Interaction channel: {channel}
 Domain: {scenario.domain}
 Current title: {scenario.title}
@@ -754,7 +802,7 @@ Return ONLY JSON with keys title, problem_summary, turns.
         updated = scenario.model_copy(deep=True)
         updated.title = rewrite.title.strip() or scenario.title
         updated.problem_summary = rewrite.problem_summary.strip() or scenario.problem_summary
-        for step, new_text in zip(updated.steps[:-1], rewrite.turns[:-1]):
+        for step, new_text in zip(updated.steps, rewrite.turns):
             if new_text.strip():
                 step.customer_turn.text = new_text.strip()
         updated.generated_by_ai = True
