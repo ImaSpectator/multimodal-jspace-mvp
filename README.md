@@ -1,11 +1,11 @@
-# JSpace Live — v1.3
+# JSpace Live — v1.3.2
 
 ## Updates
 
-- Rebuilt the top-right controls as a **fixed, borderless website-style toolbar** pinned to the top-right corner. Language, help, link, reset, and settings no longer sit inside visible boxes.
+- Top-right controls remain a **borderless website-style toolbar** in normal page flow, avoiding the stacking/overlap issue caused by fixed positioning.
 - Manual mode now has a deterministic **natural closing path**: once the issue is effectively resolved, conflicts are gone, and the customer is satisfied, the suggested customer move becomes a final thanks/goodbye. The agent replies once with a closing remark and the session ends immediately.
 - Suggested customer moves now avoid reusing customer text already present in the transcript, reducing prompt cycling in longer Manual conversations.
-- Rebuilt PDF chat rendering so every customer/agent message is a separate padded table bubble with explicit spacing. Wrapped text can no longer visually overlap the next message.
+- Rebuilt PDF chat rendering again as **full-width stacked transcript cards**. Customer and support messages no longer use staggered left/right bubbles, eliminating the crowded/overlapping appearance in long conversations and across PDF viewers.
 - Post-session **Analyze conversation** and **Save conversation as PDF** remain available after the session ends.
 - Moved the top-right toolbar higher and made the controls visually lighter: Help, link, reset, and settings are compact **borderless header icons** with only a subtle hover state.
 - Fixed Manual suggested-prompt progression again. Each agent turn gets a new suggestion-button identity, and repeated states now rotate through multiple natural customer moves instead of getting stuck after the first couple of turns.

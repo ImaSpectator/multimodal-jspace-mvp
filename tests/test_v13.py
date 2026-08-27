@@ -13,8 +13,9 @@ def _source():
 
 def test_v13_toolbar_is_fixed_borderless_and_top_right():
     source = _source()
-    assert 'APP_VERSION = "1.3-closing-toolbar-pdf"' in source
-    assert 'position:fixed!important; top:.52rem!important; right:1.15rem!important' in source
+    assert 'APP_VERSION = "1.3.2-pdf-layout-hotfix"' in source
+    assert 'position:fixed!important' not in source
+    assert 'st.columns([12.0, 1.15, .72, .72, .72, .72]' in source
     assert 'border:0!important' in source
     assert 'background:transparent!important' in source
     assert ':material/settings:' in source and ':material/help:' in source and ':material/link:' in source
@@ -40,10 +41,11 @@ def test_v13_manual_closing_turn_ends_after_agent_goodbye():
     assert state.session_phase == "ended"
 
 
-def test_v13_pdf_uses_separate_table_bubbles():
+def test_v13_pdf_uses_full_width_separate_message_cards():
     source = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert 'bubble_table = Table' in source
-    assert 'story.append(Spacer(1, 7))' in source
+    assert 'card = Table(card_rows, colWidths=[doc.width]' in source
+    assert 'story.append(Spacer(1, 10))' in source
+    assert 'bubble_width = doc.width * 0.84' not in source
     pdf = build_conversation_pdf(
         transcript=[
             {"role":"customer","text":"This is a longer customer message that should wrap safely without touching the next message. " * 4},

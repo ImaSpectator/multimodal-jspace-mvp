@@ -13,8 +13,8 @@ def _source():
 
 def test_v12_version_and_header_toolbar_is_higher_and_borderless():
     source = _source()
-    assert 'APP_VERSION = "1.3-closing-toolbar-pdf"' in source
-    assert 'position:fixed!important' in source
+    assert 'APP_VERSION = "1.3.2-pdf-layout-hotfix"' in source
+    assert 'position:fixed!important' not in source
     assert 'border:0!important' in source
     assert 'background:transparent!important' in source
     assert 'font-size:1.18rem!important' in source

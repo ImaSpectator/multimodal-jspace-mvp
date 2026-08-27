@@ -98,28 +98,51 @@ def build_conversation_pdf(
         Paragraph(_label("Conversation", "对话", language), h2),
     ]
 
+    speaker_style = ParagraphStyle(
+        "Speaker", parent=body, fontName=font, fontSize=9.7, leading=12.2,
+        textColor=colors.HexColor("#17354D"), spaceBefore=0, spaceAfter=0,
+    )
+    provider_style = ParagraphStyle(
+        "Provider", parent=meta, fontName=font, fontSize=7.4, leading=9.2,
+        textColor=colors.HexColor("#65798A"), spaceBefore=0, spaceAfter=0,
+    )
+
+    # Keep every turn in one full-width transcript lane. Alternating horizontal
+    # bubbles looked cramped in some PDF viewers and could appear to collide.
+    # Full-width cards with explicit row padding are much more robust.
     for row in transcript:
         role = str(row.get("role") or "customer")
         if role not in {"customer", "agent"}:
             continue
         who = _label("Customer", "客户", language) if role == "customer" else _label("Support Agent", "客服", language)
-        text = escape(str(row.get("text") or "")).replace("\n", "<br/>")
+        message_text = escape(str(row.get("text") or "")).replace("\n", "<br/>")
         provider = str(row.get("provider") or "").strip().replace("·", "-")
-        provider_html = f"<br/><font size='7' color='#6A7E90'>{escape(provider)}</font>" if provider and role == "agent" else ""
-        bubble = Paragraph(f"<b>{escape(who)}</b><br/>{text}{provider_html}", customer_style if role == "customer" else agent_style)
-        bubble_width = doc.width * 0.84
-        bubble_table = Table([[bubble]], colWidths=[bubble_width], hAlign=("RIGHT" if role == "customer" else "LEFT"))
-        bubble_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EEF5FC") if role == "customer" else colors.HexColor("#F7F9FC")),
-            ("BOX", (0, 0), (-1, -1), 0.55, colors.HexColor("#B7CBE0") if role == "customer" else colors.HexColor("#C9D4E2")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 10),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-            ("TOPPADDING", (0, 0), (-1, -1), 8),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+
+        card_rows = [
+            [Paragraph(f"<b>{escape(who)}</b>", speaker_style)],
+            [Paragraph(message_text, customer_style if role == "customer" else agent_style)],
+        ]
+        if provider and role == "agent":
+            card_rows.append([Paragraph(escape(provider), provider_style)])
+
+        background = colors.HexColor("#EEF5FC") if role == "customer" else colors.HexColor("#F7F9FC")
+        border = colors.HexColor("#B7CBE0") if role == "customer" else colors.HexColor("#C9D4E2")
+        card = Table(card_rows, colWidths=[doc.width], hAlign="LEFT", splitByRow=1)
+        card.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), background),
+            ("BOX", (0, 0), (-1, -1), 0.55, border),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+            ("TOPPADDING", (0, 0), (-1, 0), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 3),
+            ("TOPPADDING", (0, 1), (-1, 1), 1),
+            ("BOTTOMPADDING", (0, 1), (-1, 1), 8 if len(card_rows) == 2 else 4),
+            ("TOPPADDING", (0, 2), (-1, 2), 0),
+            ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
-        story.append(bubble_table)
-        story.append(Spacer(1, 7))
+        story.append(card)
+        story.append(Spacer(1, 10))
 
     if analysis:
         story.extend([Spacer(1, 10), Paragraph(_label("Conversation analysis", "对话分析", language), h2)])

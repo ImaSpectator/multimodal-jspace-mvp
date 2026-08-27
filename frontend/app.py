@@ -90,7 +90,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-APP_VERSION = "1.3-closing-toolbar-pdf"
+APP_VERSION = "1.3.2-pdf-layout-hotfix"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -281,30 +281,22 @@ a.anchor-link, [data-testid="stMarkdownContainer"] h1 > a, [data-testid="stMarkd
 hr { border-color:rgba(140,175,215,.12)!important; }
 @media(max-width:1000px){ .j-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.j-node-grid{grid-template-columns:1fr 1fr}.j-title{font-size:1.72rem}.j-msg{max-width:94%} }
 
-/* v1.3 floating website-style toolbar: truly borderless controls pinned to the top-right. */
+/* v1.3.1 stable header toolbar. Keep it in normal Streamlit flow — never fixed-position
+   the column container, because Streamlit grid widths collapse when detached from layout. */
 .st-key-utility_toolbar {
-  position:fixed!important; top:.52rem!important; right:1.15rem!important; z-index:99999!important;
-  width:auto!important; margin:0!important; padding:0!important; background:transparent!important;
+  margin-top:-1.05rem!important; margin-bottom:.05rem!important; padding:0!important; background:transparent!important;
 }
 .st-key-utility_toolbar [data-testid="stHorizontalBlock"] {
-  display:flex!important; align-items:center!important; justify-content:flex-end!important; gap:.22rem!important;
-  width:auto!important; min-width:0!important;
+  align-items:center!important; gap:.10rem!important; width:100%!important;
 }
-.st-key-utility_toolbar [data-testid="column"]:first-child { display:none!important; }
 .st-key-utility_toolbar [data-testid="column"] { padding:0!important; margin:0!important; }
-.st-key-utility_toolbar [data-testid="column"]:nth-child(2) {
-  flex:0 0 2.82rem!important; width:2.82rem!important; min-width:2.82rem!important; max-width:2.82rem!important;
-}
-.st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) {
-  flex:0 0 2.08rem!important; width:2.08rem!important; min-width:2.08rem!important; max-width:2.08rem!important;
-}
 .st-key-utility_toolbar .stButton { margin:0!important; padding:0!important; width:100%!important; }
 .st-key-utility_toolbar .stButton > button {
-  width:100%!important; height:2.08rem!important; min-height:2.08rem!important; padding:0!important; margin:0!important;
-  border:0!important; outline:0!important; border-radius:50%!important; background:transparent!important; box-shadow:none!important;
+  width:100%!important; height:2.15rem!important; min-height:2.15rem!important; padding:0!important; margin:0!important;
+  border:0!important; outline:0!important; background:transparent!important; box-shadow:none!important;
   color:#DCE9F6!important; display:flex!important; align-items:center!important; justify-content:center!important;
 }
-.st-key-utility_toolbar .stButton > button:hover { background:rgba(118,165,210,.08)!important; color:#FFFFFF!important; }
+.st-key-utility_toolbar .stButton > button:hover { background:rgba(118,165,210,.07)!important; border-radius:8px!important; color:#FFFFFF!important; }
 .st-key-utility_toolbar .stButton > button:focus,
 .st-key-utility_toolbar .stButton > button:focus-visible { outline:none!important; box-shadow:none!important; }
 .st-key-utility_toolbar .stButton > button > div {
@@ -316,18 +308,14 @@ hr { border-color:rgba(140,175,215,.12)!important; }
 .st-key-top_reset .stButton > button p,
 .st-key-top_settings .stButton > button p { display:none!important; }
 .st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
-  display:flex!important; align-items:center!important; justify-content:center!important;
-  width:1.18rem!important; height:1.18rem!important; min-width:1.18rem!important; margin:0!important; padding:0!important;
-  font-size:1.18rem!important; line-height:1!important; transform:translateY(0)!important;
-}
-.st-key-top_language .stButton > button {
-  border-radius:6px!important; width:2.82rem!important; color:#DCE9F6!important;
+  display:block!important; width:1.18rem!important; height:1.18rem!important; min-width:1.18rem!important;
+  margin:0!important; padding:0!important; font-size:1.18rem!important; line-height:1.18rem!important; text-align:center!important;
 }
 .st-key-top_language .stButton > button p {
-  display:flex!important; align-items:center!important; justify-content:center!important; width:100%!important; height:100%!important;
-  margin:0!important; padding:0!important; font-size:.72rem!important; font-weight:760!important; line-height:1!important; text-align:center!important;
+  display:block!important; width:100%!important; margin:0!important; padding:0!important; font-size:.74rem!important;
+  font-weight:760!important; line-height:2.15rem!important; text-align:center!important; white-space:nowrap!important;
 }
-@media(max-width:700px){ .st-key-utility_toolbar{top:.42rem!important;right:.55rem!important;} }
+@media(max-width:700px){ .st-key-utility_toolbar{margin-top:-.65rem!important;} }
 /* Manual composer stays visually attached to the conversation. The actual text entry
    is a Streamlit form so Enter and Send behave identically; the suggestion lives beside it. */
 .st-key-manual_composer { margin-top:.42rem; margin-bottom:.28rem; padding:.72rem .76rem; border:1px solid rgba(93,245,255,.16); border-radius:16px; background:rgba(8,17,31,.74); box-shadow:inset 0 1px 0 rgba(255,255,255,.025); }
@@ -826,7 +814,9 @@ def _toggle_language() -> None:
 
 
 with st.container(key="utility_toolbar"):
-    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .060, .044, .044, .044, .044], gap="small", vertical_alignment="center")
+    # Stable normal-flow header: the large first column pushes controls right without
+    # detaching Streamlit's grid from page layout.
+    spacer, lang_col, u1, u2, u3, u4 = st.columns([12.0, 1.15, .72, .72, .72, .72], gap="small", vertical_alignment="center")
     with lang_col:
         st.button(
             "中文" if not _is_zh() else "EN",
