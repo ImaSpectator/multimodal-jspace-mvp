@@ -15,18 +15,21 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.jspace_v062.ai_provider import (  # noqa: E402
+from backend.jspace.ai_provider import (  # noqa: E402
+    DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    DEFAULT_AUDIO_MODEL,
+    DEFAULT_VIDEO_MODEL,
     analyze_media_for_jspace,
-    enhance_scenario_with_gemini,
+    enhance_scenario_with_deepseek,
     generate_support_reply,
-    probe_gemini,
+    probe_deepseek,
     stream_support_reply,
 )
-from backend.jspace_v062.engine import merge_concepts, refresh_state  # noqa: E402
-from backend.jspace_v062.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
-from backend.jspace_v062.schemas import ImageObservation, ScenarioControls  # noqa: E402
-from backend.jspace_v062.simulator import (  # noqa: E402
+from backend.jspace.engine import merge_concepts, refresh_state  # noqa: E402
+from backend.jspace.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
+from backend.jspace.schemas import ImageObservation, ScenarioControls  # noqa: E402
+from backend.jspace.simulator import (  # noqa: E402
     append_agent_reply,
     apply_manual_customer_message,
     apply_scenario_customer_step,
@@ -36,7 +39,7 @@ from backend.jspace_v062.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.6.2-fast-stream"
+APP_VERSION = "0.8.0-tencent-multimodal"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -67,17 +70,17 @@ CHANNELS = {
     },
     "Voice Call": {
         "icon": "🎧", "slug": "voice call",
-        "hint": "Spoken support. Vocal affect is treated as evidence and can disagree with the literal words.",
+        "hint": "Spoken support. Uploaded audio is transcribed by Hy-ASR; emotion is inferred from wording, not raw vocal tone.",
         "affect_source": "audio",
     },
     "Video + Voice": {
         "icon": "◉", "slug": "video + voice call",
-        "hint": "Voice affect plus live visual context. JSpace can preserve disagreement between what is seen, heard, and recorded.",
+        "hint": "YT-VITA analyzes uploaded video frames and its audio track; JSpace preserves that evidence separately from backend records.",
         "affect_source": "video",
     },
     "Multimodal Mix": {
         "icon": "✦", "slug": "multimodal conversation",
-        "hint": "Text/voice + visual/media + backend evidence. Best mode for observing cross-modal uncertainty.",
+        "hint": "DeepSeek image/text + Hy-ASR audio transcription + YT-VITA video + backend evidence in one shared workspace.",
         "affect_source": "audio",
     },
 }
@@ -199,10 +202,13 @@ def _secret(name: str, default: str | None = None) -> str | None:
     return str(value) if value is not None else default
 
 
-GEMINI_API_KEY = _secret("GEMINI_API_KEY")
-GEMINI_MODEL = _secret("GEMINI_MODEL", DEFAULT_MODEL) or DEFAULT_MODEL
+TOKENHUB_API_KEY = _secret("TOKENHUB_API_KEY")
+TOKENHUB_MODEL = _secret("TOKENHUB_MODEL", DEFAULT_MODEL) or DEFAULT_MODEL
+TOKENHUB_AUDIO_MODEL = _secret("TOKENHUB_AUDIO_MODEL", DEFAULT_AUDIO_MODEL) or DEFAULT_AUDIO_MODEL
+TOKENHUB_VIDEO_MODEL = _secret("TOKENHUB_VIDEO_MODEL", DEFAULT_VIDEO_MODEL) or DEFAULT_VIDEO_MODEL
+TOKENHUB_BASE_URL = _secret("TOKENHUB_BASE_URL", DEFAULT_BASE_URL) or DEFAULT_BASE_URL
 PUBLIC_APP_URL = _secret("PUBLIC_APP_URL", "") or ""
-AI_CONNECTED = bool(GEMINI_API_KEY)
+AI_CONNECTED = bool(TOKENHUB_API_KEY)
 
 
 def _init_preferences() -> None:
@@ -221,9 +227,11 @@ def _ai_runtime() -> dict:
     speed = st.session_state.get("settings_speed", "Fast")
     reply = st.session_state.get("settings_reply", "Concise")
     if speed == "Fast":
-        timeout_ms, attempts, history = 8000, 2, 4
+        # Bound TokenHub calls explicitly and disable hidden SDK retries.
+        # DeepSeek streams can return much sooner; this is only the per-attempt cap.
+        timeout_ms, attempts, history = 12000, 2, 4
     else:
-        timeout_ms, attempts, history = 14000, 2, 6
+        timeout_ms, attempts, history = 20000, 2, 6
     if reply == "Concise":
         output_tokens, sentences = 120, 2
     else:
@@ -234,7 +242,7 @@ def _ai_runtime() -> dict:
         "history_turns": history,
         "max_output_tokens": output_tokens,
         "reply_sentences": sentences,
-        "scenario_timeout_ms": 9000 if speed == "Fast" else 14000,
+        "scenario_timeout_ms": 12000 if speed == "Fast" else 20000,
     }
 
 
@@ -256,6 +264,34 @@ def _scroll_to(element_id: str) -> None:
 
 _init_preferences()
 
+# Disable Streamlit's plain R/C developer shortcuts while preserving normal typing
+# inside inputs and standard Ctrl/Cmd keyboard shortcuts.
+components.html(
+    """
+<script>
+(function(){
+  const parentWin = window.parent;
+  const doc = parentWin.document;
+  if (parentWin.__jspaceShortcutGuardInstalled) return;
+  parentWin.__jspaceShortcutGuardInstalled = true;
+  const guard = function(e){
+    const tag = (e.target && e.target.tagName ? e.target.tagName : '').toUpperCase();
+    const editable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
+    const plainKey = !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (!editable && plainKey && (e.key === 'r' || e.key === 'R' || e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    }
+  };
+  doc.addEventListener('keydown', guard, true);
+  parentWin.addEventListener('keydown', guard, true);
+})();
+</script>
+""",
+    height=0,
+)
+
 
 def display_domain(domain: str) -> str:
     return domain.replace("_", " ").title()
@@ -267,26 +303,13 @@ def reset_sessions() -> None:
             del st.session_state[key]
 
 
-st.markdown(
-    f"""
-<div class="j-hero">
-  <div class="j-kicker">JSPACE // MULTIMODAL SERVICE LAB</div>
-  <div class="j-title">Live customer-service reasoning across text, voice, video and system evidence.</div>
-  <div class="j-sub">Observe a capacity-limited shared workspace preserve task-critical signals, uncertainty and cross-modal conflicts while the support agent works toward a natural resolution.</div>
-  <span class="j-pill">v{APP_VERSION}</span>
-  <span class="j-pill">{'Live AI ready' if AI_CONNECTED else 'Local simulation mode'}</span>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
 # Compact utility controls in the top-right.
-filler, u1, u2, u3, u4 = st.columns([10.4, .55, .55, .55, .55], gap="small")
+filler, u1, u2, u3, u4 = st.columns([12.0, .46, .46, .46, .46], gap="small")
 with u1:
     with st.popover("❔", help="Help"):
         st.markdown("**Quick guide**")
         st.write("Scenario Lab generates a case and reveals it turn by turn. Manual mode lets you play the customer until you end the session.")
-        st.write("Multimodal Mix is best for testing disagreement between customer statements, media evidence, affect, and company-system data.")
+        st.write("Multimodal Mix routes text/images to DeepSeek Vision, audio to Hy-ASR transcription, video to YT-VITA, then combines the resulting evidence with company-system data.")
 with u2:
     with st.popover("↗", help="Share"):
         st.markdown("**Email this experience**")
@@ -307,23 +330,40 @@ with u3:
 with u4:
     with st.popover("⚙", help="Settings"):
         st.markdown("**Conversation settings**")
-        st.selectbox("AI response profile", ["Fast", "Balanced"], key="settings_speed", help="Fast uses an 8-second Gemini request timeout and compact context. Balanced allows more time/context.")
+        st.selectbox("AI response profile", ["Fast", "Balanced"], key="settings_speed", help="Fast uses a 12-second maximum TokenHub request and compact context. The deadline is only a cap; streaming can respond much sooner. Balanced allows more time/context.")
         st.selectbox("Agent reply length", ["Concise", "Standard"], key="settings_reply")
-        st.toggle("Use Gemini to vary scenario wording", key="settings_scenario_ai", help="Turn this off for near-instant curated scenario generation.")
+        st.toggle("Use DeepSeek to vary scenario wording", key="settings_scenario_ai", help="Turn this off for near-instant curated scenario generation.")
         st.toggle("Auto-jump to conversation after generation", key="settings_auto_scroll")
         cfg = _ai_runtime()
-        st.caption(f"Gemini timeout: {cfg['timeout_ms']/1000:.0f}s/attempt · history: {cfg['history_turns']} messages")
-        if st.button("Test Gemini connection", use_container_width=True, key="test_gemini"):
+        st.caption(f"Text/image: {TOKENHUB_MODEL} · Audio: {TOKENHUB_AUDIO_MODEL} · Video: {TOKENHUB_VIDEO_MODEL}")
+        st.caption(f"DeepSeek timeout: {cfg['timeout_ms']/1000:.0f}s/attempt · history: {cfg['history_turns']} messages")
+        if st.button("Test DeepSeek connection", use_container_width=True, key="test_deepseek"):
             with st.spinner("Testing…"):
-                ok, detail = probe_gemini(api_key=GEMINI_API_KEY, model=GEMINI_MODEL, timeout_ms=5000)
+                ok, detail = probe_deepseek(api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL, timeout_s=12.0)
             if ok:
-                st.success(f"Connected · {GEMINI_MODEL}")
+                st.success(f"Connected · {TOKENHUB_MODEL}")
             else:
                 st.error(detail)
         components.html(
             """<button onclick="window.parent.print()" style="width:100%;padding:8px 12px;border-radius:10px;border:1px solid #4a7891;background:#0d1b2b;color:#eaf7ff;cursor:pointer">Print this view</button>""",
             height=46,
         )
+
+st.markdown("<div style=\"height:.65rem\"></div>", unsafe_allow_html=True)
+
+st.markdown(
+    f"""
+<div class="j-hero">
+  <div class="j-kicker">JSPACE // MULTIMODAL SERVICE LAB</div>
+  <div class="j-title">Live customer-service reasoning across text, voice, video and system evidence.</div>
+  <div class="j-sub">Observe a capacity-limited shared workspace preserve task-critical signals, uncertainty and cross-modal conflicts while the support agent works toward a natural resolution.</div>
+  <span class="j-pill">v{APP_VERSION}</span>
+  <span class="j-pill">{'Tencent multimodal routing enabled' if AI_CONNECTED else 'Local simulation mode'}</span>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
 
 
 def profile_html(profile: dict) -> str:
@@ -424,7 +464,16 @@ def _message_html(row: dict, channel_label: str) -> str:
     text = row.get("text", "")
     if role == "agent":
         who = "JSpace Support Agent"
-        meta = ""
+        provider = str(row.get("provider") or "").strip()
+        if provider:
+            if provider.lower().startswith("deepseek"):
+                meta = "AI provider · " + provider
+            elif "fallback" in provider.lower() or "simulation" in provider.lower():
+                meta = "Backup responder · " + provider
+            else:
+                meta = provider
+        else:
+            meta = ""
     else:
         who = "Customer"
         details = []
@@ -461,9 +510,9 @@ def make_responder(channel_label: str, media: list[dict] | None = None):
     def responder(state, profile, domain):
         cfg = _ai_runtime()
         return generate_support_reply(
-            state, profile, domain, api_key=GEMINI_API_KEY, model=GEMINI_MODEL,
+            state, profile, domain, api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL,
             fallback=state.last_response, channel=CHANNELS[channel_label]["slug"], media=media,
-            timeout_ms=cfg["timeout_ms"], max_attempts=cfg["max_attempts"],
+            timeout_s=cfg["timeout_ms"] / 1000.0, max_attempts=cfg["max_attempts"],
             history_turns=cfg["history_turns"], max_output_tokens=cfg["max_output_tokens"],
             reply_sentences=cfg["reply_sentences"],
         )
@@ -476,9 +525,9 @@ def stream_agent_reply(state, profile, domain: str, channel_label: str, conversa
     final_text, final_provider = state.last_response or "I can help with that.", "Local simulation"
     got_text = False
     for partial, provider, done in stream_support_reply(
-        state, profile, domain, api_key=GEMINI_API_KEY, model=GEMINI_MODEL,
+        state, profile, domain, api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, base_url=TOKENHUB_BASE_URL,
         fallback=state.last_response, channel=CHANNELS[channel_label]["slug"], media=media,
-        timeout_ms=cfg["timeout_ms"], max_attempts=cfg["max_attempts"],
+        timeout_s=cfg["timeout_ms"] / 1000.0, max_attempts=cfg["max_attempts"],
         history_turns=cfg["history_turns"], max_output_tokens=cfg["max_output_tokens"],
         reply_sentences=cfg["reply_sentences"],
     ):
@@ -487,7 +536,7 @@ def stream_agent_reply(state, profile, domain: str, channel_label: str, conversa
         final_text, final_provider = partial, provider
         if partial:
             got_text = True
-            preview = state.transcript + [{"role": "agent", "text": partial}]
+            preview = state.transcript + [{"role": "agent", "text": partial, "provider": provider}]
             render_conversation(preview, channel_label, slot=conversation_slot)
         if done:
             break
@@ -554,6 +603,11 @@ def suggested_customer_prompt(domain: str, state) -> str:
     return "Can you tell me what you've verified so far and what the next concrete step is?"
 
 
+def _use_manual_suggestion(suggestion: str) -> None:
+    """Prefill the manual chat widget on the next rerun."""
+    st.session_state["manual_chat_input"] = suggestion
+
+
 def render_start_here(domains: list[str]) -> None:
     st.markdown("## How to use JSpace Live")
     st.markdown("Explore a generated service interaction or become the customer yourself. Customer messages appear immediately while the support agent is typing. The active workspace is deliberately small so you can see what evidence survives, what conflicts, and what changes the next response.")
@@ -565,10 +619,10 @@ def render_start_here(domains: list[str]) -> None:
 
     st.markdown("### What the JSpace pipeline is doing")
     nodes = [
-        ("01", "Signals", "Customer text, vocal/visible affect, uploaded media, and company-system events."),
+        ("01", "Signals", "Customer text, DeepSeek image evidence, Hy-ASR audio transcripts, YT-VITA video evidence, and company-system events."),
         ("02", "Concepts", "Signals become compact, traceable task-relevant concepts."),
         ("03", "Conflict engine", "Contradictions remain explicit instead of being averaged away."),
-        ("04", "Top-K JSpace", "Only a few concepts stay active; v0.6 uses K=3–6 to keep the workspace genuinely compact."),
+        ("04", "Top-K JSpace", "Only a few concepts stay active; v0.8 uses K=3–6 to keep the workspace genuinely compact."),
         ("05", "Support response", "The agent reasons over the active state and recent conversation to move toward resolution."),
     ]
     node_html = "".join(f'<div class="j-node"><div class="j-node-num">NODE {n}</div><div class="j-node-name">{name}</div><div class="j-node-desc">{desc}</div></div>' for n, name, desc in nodes)
@@ -576,8 +630,8 @@ def render_start_here(domains: list[str]) -> None:
 
     st.markdown("### Key controls and signals")
     terms = [
-        ("JSpace capacity (K)", "Maximum number of concepts allowed in the active workspace. Smaller K makes selection stricter; it does not directly control Gemini latency."),
-        ("Customer affect intensity", "How strongly the current emotional signal is expressed. In voice/video modes it can be informed by non-text evidence."),
+        ("JSpace capacity (K)", "Maximum number of concepts allowed in the active workspace. Smaller K makes selection stricter; it does not directly control model latency."),
+        ("Customer affect intensity", "Scenario Lab can simulate nonverbal affect. In Manual mode, affect is inferred from typed/transcribed wording; Hy-ASR is transcription-only and does not classify vocal emotion."),
         ("Satisfaction", "A dynamic interaction-quality signal that rises with useful progress/resolution and falls when the exchange remains confusing or unhelpful."),
         ("Priority", "The ranking used to decide what survives Top-K: relevance, confidence, conflict importance and recency."),
         ("Evidence & provenance", "Where each active concept came from — text, audio, image/video, backend systems, or derived reasoning."),
@@ -612,11 +666,15 @@ def process_scenario_turn(scenario, state, step_index: int, channel_label: str, 
     return True
 
 
-def process_manual_turn(state, profile, domain: str, channel_label: str, prompt: str, media_files, conversation_slot) -> bool:
+def process_manual_turn(state, profile, domain: str, channel_label: str, prompt: str, media_files, conversation_slot, *, video_url: str = "") -> bool:
     epoch = int(st.session_state.get("generation_epoch", 0))
     media, media_display = read_uploaded_media(media_files)
+    video_url = (video_url or "").strip()
+    if video_url:
+        media.append({"name": "linked-video", "mime_type": "video/mp4", "url": video_url})
+        media_display.append({"name": "linked video URL", "mime_type": "video/mp4"})
     apply_manual_customer_message(
-        state, prompt, attachments=media_display, affect_source=CHANNELS[channel_label]["affect_source"]
+        state, prompt, attachments=media_display, affect_source="text"
     )
     # Show the customer's message immediately. Media analysis only runs when the user attached media.
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
@@ -624,8 +682,9 @@ def process_manual_turn(state, profile, domain: str, channel_label: str, prompt:
     if media:
         cfg = _ai_runtime()
         media_concepts = analyze_media_for_jspace(
-            media, api_key=GEMINI_API_KEY, model=GEMINI_MODEL, domain=domain,
-            timeout_ms=max(cfg["timeout_ms"], 10000),
+            media, api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, audio_model=TOKENHUB_AUDIO_MODEL,
+            video_model=TOKENHUB_VIDEO_MODEL, base_url=TOKENHUB_BASE_URL, domain=domain,
+            timeout_s=cfg["timeout_ms"] / 1000.0,
         )
         if int(st.session_state.get("generation_epoch", 0)) != epoch:
             return False
@@ -678,12 +737,13 @@ if scenario_tab.open:
                 scenario_provider = "Curated scenario · instant"
                 if AI_CONNECTED and st.session_state.get("settings_scenario_ai", True):
                     cfg = _ai_runtime()
-                    scenario, scenario_provider = enhance_scenario_with_gemini(
+                    scenario, scenario_provider = enhance_scenario_with_deepseek(
                         scenario,
-                        api_key=GEMINI_API_KEY,
-                        model=GEMINI_MODEL,
+                        api_key=TOKENHUB_API_KEY,
+                        model=TOKENHUB_MODEL,
+                        base_url=TOKENHUB_BASE_URL,
                         channel=CHANNELS[channel_label]["slug"],
-                        timeout_ms=cfg["scenario_timeout_ms"],
+                        timeout_s=cfg["scenario_timeout_ms"] / 1000.0,
                     )
                 scenario = prepare_scenario_for_channel(scenario, channel_label)
             if int(st.session_state.get("generation_epoch", 0)) == epoch:
@@ -813,44 +873,65 @@ if manual_tab.open:
 
                 if not manual_state.session_ended:
                     suggestion = suggested_customer_prompt(active_manual_domain, manual_state)
-                    st.markdown(f'<div class="j-suggest">Suggested customer prompt: {html.escape(suggestion)}</div>', unsafe_allow_html=True)
-                    if st.button("Use suggested prompt", key="use_manual_suggestion"):
-                        st.session_state.manual_prefill = suggestion
-                        st.rerun()
 
                     media_types = {
                         "Text Messages": ["png", "jpg", "jpeg", "webp"],
                         "Voice Call": ["mp3", "wav", "m4a", "ogg"],
-                        "Video + Voice": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "webm"],
-                        "Multimodal Mix": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "webm"],
+                        "Video + Voice": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "avi", "webm"],
+                        "Multimodal Mix": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "avi", "webm"],
                     }
                     media_files = st.file_uploader(
                         "Attach evidence for this turn (optional)",
                         type=media_types[active_manual_channel], accept_multiple_files=True,
                         key=f"manual_media_{st.session_state.get('manual_media_key', 0)}",
-                        help="Use screenshots, audio or video to add another source of evidence. Multimodal modes are designed to expose agreement and conflict across signals.",
+                        help="Images are analyzed by DeepSeek Vision, audio is transcribed by Hy-ASR, and video is analyzed by YT-VITA. All outputs become explicit JSpace evidence.",
                     )
                     if media_files:
                         st.caption("Attached: " + ", ".join(f.name for f in media_files))
 
-                    prefill = st.session_state.pop("manual_prefill", "") if "manual_prefill" in st.session_state else ""
-                    input_label = "Type the customer's text message" if active_manual_channel == "Text Messages" else "Type what the customer says"
-                    with st.form("manual_turn_form", clear_on_submit=True):
-                        prompt = st.text_area(
-                            input_label,
-                            value=prefill,
-                            height=92,
-                            placeholder=suggestion,
-                            help="Your message appears immediately before the support agent starts generating its reply.",
+                    video_url = ""
+                    if active_manual_channel in {"Video + Voice", "Multimodal Mix"}:
+                        video_url = st.text_input(
+                            "Public video URL (optional)",
+                            key=f"manual_video_url_{st.session_state.get('manual_media_key', 0)}",
+                            placeholder="https://.../clip.mp4",
+                            help="YT-VITA officially documents video_url input. A public MP4/MOV/AVI/WebM URL is the most reliable path; local video uploads use a best-effort data URL.",
                         )
-                        send_col, end_col = st.columns([3, 1])
-                        send = send_col.form_submit_button("Send message", type="primary", use_container_width=True)
-                        end_now = end_col.form_submit_button("End session", use_container_width=True)
 
-                    if send and prompt.strip():
+                    # Keep the chat composer directly below the conversation. A single-line
+                    # text input intentionally submits on Enter, which feels closer to live chat.
+                    input_label = "Message the support agent as the customer"
+                    with st.form("manual_turn_form", clear_on_submit=True):
+                        prompt = st.text_input(
+                            input_label,
+                            key="manual_chat_input",
+                            placeholder="Type a customer message and press Enter…",
+                            help="Press Enter or click Send message. Your message appears immediately before the support agent starts generating its reply.",
+                        )
+                        send = st.form_submit_button("Send message", type="primary", use_container_width=True)
+
+                    suggest_left, suggest_right = st.columns([4.2, 1.3], gap="small")
+                    with suggest_left:
+                        st.markdown(
+                            f'<div class="j-suggest">Suggested customer prompt: {html.escape(suggestion)}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with suggest_right:
+                        st.button(
+                            "Use suggested prompt",
+                            key="use_manual_suggestion",
+                            use_container_width=True,
+                            on_click=_use_manual_suggestion,
+                            args=(suggestion,),
+                        )
+
+                    end_now = st.button("End session", use_container_width=True, key="manual_end_session")
+
+                    if send and (prompt.strip() or media_files or video_url.strip()):
+                        customer_text = prompt.strip() or "[Customer attached media evidence for this turn.]"
                         ok = process_manual_turn(
                             manual_state, manual_profile, active_manual_domain, active_manual_channel,
-                            prompt.strip(), media_files, conversation_slot,
+                            customer_text, media_files, conversation_slot, video_url=video_url,
                         )
                         if ok:
                             st.session_state.manual_state_v06 = manual_state
@@ -871,7 +952,10 @@ if manual_tab.open:
                 st.write("**Channel:**", active_manual_channel)
                 st.write("**Company-system events:**", manual_state.backend_history)
                 st.write("**AI connected:**", AI_CONNECTED)
-                st.write("**Model:**", GEMINI_MODEL)
+                st.write("**Provider:**", "Tencent TokenHub")
+                st.write("**Text + image model:**", TOKENHUB_MODEL)
+                st.write("**Audio transcription:**", TOKENHUB_AUDIO_MODEL)
+                st.write("**Video understanding:**", TOKENHUB_VIDEO_MODEL)
                 st.write("**Agent providers:**", [r.get("provider") for r in manual_state.transcript if r.get("role") == "agent"])
         else:
             st.info("Choose a domain/channel and start a session. Multimodal Mix gives the richest demonstration of conflicting evidence across modalities.")
