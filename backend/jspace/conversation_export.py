@@ -107,9 +107,11 @@ def build_conversation_pdf(
         textColor=colors.HexColor("#65798A"), spaceBefore=0, spaceAfter=0,
     )
 
-    # Keep every turn in one full-width transcript lane. Alternating horizontal
-    # bubbles looked cramped in some PDF viewers and could appear to collide.
-    # Full-width cards with explicit row padding are much more robust.
+    # Render each turn as a single full-width transcript row: fixed speaker column on
+    # the left, message content on the right. There is no alternating horizontal
+    # offset, so PDF viewers cannot visually stack or overlap customer/agent cards.
+    speaker_col = 1.08 * inch
+    message_col = doc.width - speaker_col
     for row in transcript:
         role = str(row.get("role") or "customer")
         if role not in {"customer", "agent"}:
@@ -118,31 +120,38 @@ def build_conversation_pdf(
         message_text = escape(str(row.get("text") or "")).replace("\n", "<br/>")
         provider = str(row.get("provider") or "").strip().replace("·", "-")
 
-        card_rows = [
-            [Paragraph(f"<b>{escape(who)}</b>", speaker_style)],
-            [Paragraph(message_text, customer_style if role == "customer" else agent_style)],
-        ]
-        if provider and role == "agent":
-            card_rows.append([Paragraph(escape(provider), provider_style)])
+        speaker_bg = colors.HexColor("#DCEAF7") if role == "customer" else colors.HexColor("#E7EDF4")
+        message_bg = colors.HexColor("#F5F9FD") if role == "customer" else colors.HexColor("#FAFBFD")
+        rule = colors.HexColor("#B8CADB") if role == "customer" else colors.HexColor("#CBD5DF")
 
-        background = colors.HexColor("#EEF5FC") if role == "customer" else colors.HexColor("#F7F9FC")
-        border = colors.HexColor("#B7CBE0") if role == "customer" else colors.HexColor("#C9D4E2")
-        card = Table(card_rows, colWidths=[doc.width], hAlign="LEFT", splitByRow=1)
-        card.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), background),
-            ("BOX", (0, 0), (-1, -1), 0.55, border),
-            ("LEFTPADDING", (0, 0), (-1, -1), 12),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
-            ("TOPPADDING", (0, 0), (-1, 0), 9),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 3),
-            ("TOPPADDING", (0, 1), (-1, 1), 1),
-            ("BOTTOMPADDING", (0, 1), (-1, 1), 8 if len(card_rows) == 2 else 4),
-            ("TOPPADDING", (0, 2), (-1, 2), 0),
-            ("BOTTOMPADDING", (0, 2), (-1, 2), 8),
+        message_flow = [Paragraph(message_text, customer_style if role == "customer" else agent_style)]
+        if provider and role == "agent":
+            message_flow.append(Spacer(1, 3))
+            message_flow.append(Paragraph(escape(provider), provider_style))
+
+        turn = Table(
+            [[Paragraph(f"<b>{escape(who)}</b>", speaker_style), message_flow]],
+            colWidths=[speaker_col, message_col],
+            hAlign="LEFT",
+            splitByRow=1,
+        )
+        turn.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, 0), speaker_bg),
+            ("BACKGROUND", (1, 0), (1, 0), message_bg),
+            ("BOX", (0, 0), (-1, -1), 0.45, rule),
+            ("LINEAFTER", (0, 0), (0, 0), 0.45, rule),
+            ("LEFTPADDING", (0, 0), (0, 0), 9),
+            ("RIGHTPADDING", (0, 0), (0, 0), 8),
+            ("TOPPADDING", (0, 0), (0, 0), 10),
+            ("BOTTOMPADDING", (0, 0), (0, 0), 10),
+            ("LEFTPADDING", (1, 0), (1, 0), 11),
+            ("RIGHTPADDING", (1, 0), (1, 0), 11),
+            ("TOPPADDING", (1, 0), (1, 0), 9),
+            ("BOTTOMPADDING", (1, 0), (1, 0), 9),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
-        story.append(card)
-        story.append(Spacer(1, 10))
+        story.append(turn)
+        story.append(Spacer(1, 8))
 
     if analysis:
         story.extend([Spacer(1, 10), Paragraph(_label("Conversation analysis", "对话分析", language), h2)])

@@ -90,7 +90,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-APP_VERSION = "1.3.2-pdf-layout-hotfix"
+APP_VERSION = "1.3.3-pdf-toolbar-polish"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -310,6 +310,14 @@ hr { border-color:rgba(140,175,215,.12)!important; }
 .st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
   display:block!important; width:1.18rem!important; height:1.18rem!important; min-width:1.18rem!important;
   margin:0!important; padding:0!important; font-size:1.18rem!important; line-height:1.18rem!important; text-align:center!important;
+}
+/* Material glyph optical centers sit slightly left inside Streamlit's icon wrapper.
+   Shift only the four utility glyphs—not the EN/中文 control—2px right. */
+.st-key-top_help [data-testid="stIconMaterial"],
+.st-key-top_share [data-testid="stIconMaterial"],
+.st-key-top_reset [data-testid="stIconMaterial"],
+.st-key-top_settings [data-testid="stIconMaterial"] {
+  transform:translateX(2px)!important;
 }
 .st-key-top_language .stButton > button p {
   display:block!important; width:100%!important; margin:0!important; padding:0!important; font-size:.74rem!important;
