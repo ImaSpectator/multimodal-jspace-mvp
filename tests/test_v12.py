@@ -13,11 +13,11 @@ def _source():
 
 def test_v12_version_and_header_toolbar_is_higher_and_borderless():
     source = _source()
-    assert 'APP_VERSION = "1.2.0-export-analysis"' in source
-    assert 'margin-top:-1.15rem' in source
+    assert 'APP_VERSION = "1.3-closing-toolbar-pdf"' in source
+    assert 'position:fixed!important' in source
     assert 'border:0!important' in source
     assert 'background:transparent!important' in source
-    assert 'font-size:1.14rem!important' in source
+    assert 'font-size:1.18rem!important' in source
 
 
 def test_v12_suggestion_button_has_per_turn_identity_and_safe_prefill():

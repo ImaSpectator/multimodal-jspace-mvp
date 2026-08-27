@@ -7,7 +7,7 @@ def _source():
 
 def test_v10_version_and_prompt_prefill_is_streamlit_safe():
     source = _source()
-    assert 'APP_VERSION = "1.2.0-export-analysis"' in source
+    assert 'APP_VERSION = "1.3-closing-toolbar-pdf"' in source
     assert 'def _queue_manual_suggestion' in source
     assert 'st.session_state["manual_chat_prefill"] = suggestion' in source
     assert 'queued_prefill = st.session_state.pop("manual_chat_prefill", None)' in source

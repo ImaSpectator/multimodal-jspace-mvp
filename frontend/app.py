@@ -90,7 +90,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-APP_VERSION = "1.2.0-export-analysis"
+APP_VERSION = "1.3-closing-toolbar-pdf"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -281,44 +281,53 @@ a.anchor-link, [data-testid="stMarkdownContainer"] h1 > a, [data-testid="stMarkd
 hr { border-color:rgba(140,175,215,.12)!important; }
 @media(max-width:1000px){ .j-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.j-node-grid{grid-template-columns:1fr 1fr}.j-title{font-size:1.72rem}.j-msg{max-width:94%} }
 
-/* v1.2 header-style toolbar: no visible button chrome, positioned higher like a normal site header. */
-.st-key-utility_toolbar { margin-top:-1.15rem; margin-bottom:.20rem; }
-.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.04rem!important; }
-.st-key-utility_toolbar [data-testid="column"]:first-child { flex:1 1 auto!important; min-width:0!important; }
-.st-key-utility_toolbar [data-testid="column"]:nth-child(2) { flex:0 0 2.75rem!important; width:2.75rem!important; min-width:2.75rem!important; max-width:2.75rem!important; }
-.st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) { flex:0 0 2.18rem!important; width:2.18rem!important; min-width:2.18rem!important; max-width:2.18rem!important; }
-.st-key-utility_toolbar .stButton { margin:0!important; width:100%!important; }
-.st-key-utility_toolbar .stButton > button {
-  position:relative!important; width:100%!important; height:2.18rem!important; min-height:2.18rem!important;
-  padding:0!important; margin:0!important; border:0!important; border-radius:8px!important;
-  background:transparent!important; box-shadow:none!important; color:#DDEAF7!important;
-  display:flex!important; align-items:center!important; justify-content:center!important; transition:.14s ease!important;
+/* v1.3 floating website-style toolbar: truly borderless controls pinned to the top-right. */
+.st-key-utility_toolbar {
+  position:fixed!important; top:.52rem!important; right:1.15rem!important; z-index:99999!important;
+  width:auto!important; margin:0!important; padding:0!important; background:transparent!important;
 }
-.st-key-utility_toolbar .stButton > button:hover { background:rgba(117,160,205,.07)!important; color:#F4FBFF!important; transform:none!important; }
-.st-key-utility_toolbar .stButton > button:focus-visible { outline:1px solid rgba(93,245,255,.52)!important; outline-offset:1px!important; }
+.st-key-utility_toolbar [data-testid="stHorizontalBlock"] {
+  display:flex!important; align-items:center!important; justify-content:flex-end!important; gap:.22rem!important;
+  width:auto!important; min-width:0!important;
+}
+.st-key-utility_toolbar [data-testid="column"]:first-child { display:none!important; }
+.st-key-utility_toolbar [data-testid="column"] { padding:0!important; margin:0!important; }
+.st-key-utility_toolbar [data-testid="column"]:nth-child(2) {
+  flex:0 0 2.82rem!important; width:2.82rem!important; min-width:2.82rem!important; max-width:2.82rem!important;
+}
+.st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) {
+  flex:0 0 2.08rem!important; width:2.08rem!important; min-width:2.08rem!important; max-width:2.08rem!important;
+}
+.st-key-utility_toolbar .stButton { margin:0!important; padding:0!important; width:100%!important; }
+.st-key-utility_toolbar .stButton > button {
+  width:100%!important; height:2.08rem!important; min-height:2.08rem!important; padding:0!important; margin:0!important;
+  border:0!important; outline:0!important; border-radius:50%!important; background:transparent!important; box-shadow:none!important;
+  color:#DCE9F6!important; display:flex!important; align-items:center!important; justify-content:center!important;
+}
+.st-key-utility_toolbar .stButton > button:hover { background:rgba(118,165,210,.08)!important; color:#FFFFFF!important; }
+.st-key-utility_toolbar .stButton > button:focus,
+.st-key-utility_toolbar .stButton > button:focus-visible { outline:none!important; box-shadow:none!important; }
 .st-key-utility_toolbar .stButton > button > div {
-  position:absolute!important; inset:0!important; width:100%!important; height:100%!important;
-  display:flex!important; align-items:center!important; justify-content:center!important; gap:0!important; margin:0!important; padding:0!important;
+  width:100%!important; height:100%!important; display:flex!important; align-items:center!important; justify-content:center!important;
+  gap:0!important; margin:0!important; padding:0!important;
 }
 .st-key-top_help .stButton > button p,
 .st-key-top_share .stButton > button p,
 .st-key-top_reset .stButton > button p,
-.st-key-top_settings .stButton > button p { display:none!important; width:0!important; height:0!important; margin:0!important; padding:0!important; }
+.st-key-top_settings .stButton > button p { display:none!important; }
 .st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
-  position:static!important; transform:none!important; display:flex!important; align-items:center!important; justify-content:center!important;
-  width:1.14rem!important; height:1.14rem!important; min-width:1.14rem!important; line-height:1!important;
-  font-size:1.14rem!important; margin:0!important; padding:0!important; text-align:center!important;
+  display:flex!important; align-items:center!important; justify-content:center!important;
+  width:1.18rem!important; height:1.18rem!important; min-width:1.18rem!important; margin:0!important; padding:0!important;
+  font-size:1.18rem!important; line-height:1!important; transform:translateY(0)!important;
 }
-.st-key-top_language .stButton > button { border-radius:7px!important; }
+.st-key-top_language .stButton > button {
+  border-radius:6px!important; width:2.82rem!important; color:#DCE9F6!important;
+}
 .st-key-top_language .stButton > button p {
-  display:flex!important; align-items:center!important; justify-content:center!important; margin:0!important; padding:0!important;
-  width:100%!important; height:100%!important; text-align:center!important; line-height:1!important; font-size:.72rem!important; font-weight:750!important; white-space:nowrap!important;
+  display:flex!important; align-items:center!important; justify-content:center!important; width:100%!important; height:100%!important;
+  margin:0!important; padding:0!important; font-size:.72rem!important; font-weight:760!important; line-height:1!important; text-align:center!important;
 }
-@media(max-width:700px){
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:2.55rem!important;width:2.55rem!important;min-width:2.55rem!important;max-width:2.55rem!important;}
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.05rem!important;width:2.05rem!important;min-width:2.05rem!important;max-width:2.05rem!important;}
-  .st-key-utility_toolbar .stButton>button{height:2.05rem!important;min-height:2.05rem!important;}
-}
+@media(max-width:700px){ .st-key-utility_toolbar{top:.42rem!important;right:.55rem!important;} }
 /* Manual composer stays visually attached to the conversation. The actual text entry
    is a Streamlit form so Enter and Send behave identically; the suggestion lives beside it. */
 .st-key-manual_composer { margin-top:.42rem; margin-bottom:.28rem; padding:.72rem .76rem; border:1px solid rgba(93,245,255,.16); border-radius:16px; background:rgba(8,17,31,.74); box-shadow:inset 0 1px 0 rgba(255,255,255,.025); }
@@ -817,7 +826,7 @@ def _toggle_language() -> None:
 
 
 with st.container(key="utility_toolbar"):
-    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .064, .045, .045, .045, .045], gap="small", vertical_alignment="center")
+    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .060, .044, .044, .044, .044], gap="small", vertical_alignment="center")
     with lang_col:
         st.button(
             "中文" if not _is_zh() else "EN",
@@ -1123,13 +1132,42 @@ def prepare_scenario_for_channel(scenario, channel_label: str):
     return scenario
 
 
-def suggested_customer_prompt(domain: str, state) -> str:
-    """Suggest the customer's next *move*, not just another question.
+def _manual_ready_to_close(state) -> bool:
+    """Return True when the manual customer can naturally close instead of asking again."""
+    if getattr(state, "session_ended", False):
+        return False
+    if getattr(state, "session_phase", "active") in {"resolved", "closing"}:
+        return True
+    if getattr(state, "conflicts", []):
+        return False
+    satisfaction = float(getattr(state, "customer_satisfaction", 0.0) or 0.0)
+    action = str(getattr(state, "recommended_action_code", "") or "")
+    last_agent = next((str(r.get("text") or "") for r in reversed(getattr(state, "transcript", [])) if r.get("role") == "agent"), "")
+    low = last_agent.lower()
+    resolution_language = any(token in low for token in [
+        "resolved", "fixed", "working now", "all set", "completed", "restored",
+        "anything else", "other questions", "other concerns",
+        "已经解决", "已解决", "恢复正常", "处理完成", "已经恢复", "还有其他", "其他问题",
+    ])
+    return satisfaction >= 76 and (action in {"confirm_resolution", "close_session"} or resolution_language)
 
-    The mix deliberately includes confirmations, instructions, corrections, and short
-    questions. This lets Manual mode progress toward remediation instead of getting
-    trapped in an endless interview loop.
-    """
+
+def _unused_customer_move(state, candidates: list[str]) -> str:
+    """Pick a move that the customer has not already used in this transcript."""
+    used = {str(r.get("text") or "").strip() for r in getattr(state, "transcript", []) if r.get("role") == "customer"}
+    for candidate in candidates:
+        if candidate.strip() not in used:
+            return candidate
+    # If a very long session exhausts the bank, include turn context so the wording still moves forward.
+    n = sum(1 for r in getattr(state, "transcript", []) if r.get("role") == "agent")
+    return L(
+        f"Okay. Please carry out the next concrete action from what you've already verified; this is turn {n + 1}, so I don't want to repeat earlier steps.",
+        f"好的。请基于你已经核实的信息直接执行下一项具体操作；现在已经是第 {n + 1} 轮了，我不想再重复之前的步骤。",
+    )
+
+
+def suggested_customer_prompt(domain: str, state) -> str:
+    """Suggest the customer's next move, including a deterministic natural closing."""
     if not state.transcript:
         return (CUSTOMER_STARTERS_ZH if _is_zh() else CUSTOMER_STARTERS).get(
             domain, L("I need help with an issue on my account. Can you check the current system status?", "我的账户有一个问题。你能帮我检查当前系统状态吗？")
@@ -1137,61 +1175,69 @@ def suggested_customer_prompt(domain: str, state) -> str:
     if state.session_ended:
         return ""
 
-    last_agent = next((str(row.get("text") or "") for row in reversed(state.transcript) if row.get("role") == "agent"), "")
-    low = last_agent.lower()
-    turn_count = sum(1 for row in state.transcript if row.get("role") == "agent")
-
-    if state.session_phase == "resolved":
+    if _manual_ready_to_close(state):
         return L(
-            "That works on my side now. I don't have any other concerns — thanks for getting it fixed.",
-            "我这边现在已经正常了，也没有其他问题。谢谢你帮我处理好。",
+            "Everything looks good now. That's all I needed - thank you for your help, and have a good day!",
+            "现在一切都正常了，我这边没有其他问题。谢谢你的帮助，祝你今天愉快！",
         )
 
+    last_agent = next((str(row.get("text") or "") for row in reversed(state.transcript) if row.get("role") == "agent"), "")
+    low = last_agent.lower()
     action = str(getattr(state, "recommended_action_code", "") or "")
+
     if action == "act_on_root_cause":
-        action_moves = [
+        return _unused_customer_move(state, [
             L("That explanation makes sense. Please go ahead with the concrete fix you just described and let me know when the system updates.", "这个解释说得通。请直接按你刚才说的方案处理，系统更新后告诉我结果。"),
             L("Yes, please apply that fix now. I'll confirm what I see once the change reaches my side.", "可以，请现在直接执行这个修复。我会在变化同步到我这边后确认结果。"),
             L("Go ahead with the remediation. I don't need another explanation unless something blocks the change.", "请直接进行修复。如果没有新的阻塞，就不需要再重复解释了。"),
             L("Please proceed with the system-side action and tell me the result once it completes.", "请继续执行系统侧操作，完成后直接告诉我结果。"),
-        ]
-        return action_moves[turn_count % len(action_moves)]
+            L("I'm ready for you to make that change. Please do it now and then verify the final status.", "我这边可以了，请现在执行这个更改，然后核实最终状态。"),
+        ])
     if action == "avoid_repetition":
-        repeat_moves = [
+        return _unused_customer_move(state, [
             L("I've already completed those steps, so please skip the repeats and move to the next system-side check.", "这些步骤我已经做过了，请不要再重复，让我们直接进入下一项系统侧检查。"),
             L("Let's use the results from the troubleshooting I've already done and continue from there.", "请直接沿用我已经完成的排查结果，从那里继续处理。"),
             L("I don't want to repeat the same checks again. Please move to the next action that can actually change the outcome.", "我不想再重复相同检查了。请进入真正能改变结果的下一步操作。"),
-        ]
-        return repeat_moves[turn_count % len(repeat_moves)]
+            L("You already have those results. Please use them and continue with a new diagnostic step.", "这些结果你已经有了，请直接利用它们并进入新的诊断步骤。"),
+        ])
     if state.conflicts:
-        conflict_moves = [
+        return _unused_customer_move(state, [
             L("That still doesn't match what I see. Please verify the authoritative record and resolve the system-side mismatch before we move on.", "这还是和我看到的不一致。请核对权威记录，并先把系统侧的不一致处理掉再继续。"),
             L("I understand there is a mismatch. Please keep the case open and check the specific blocker rather than asking me to retry anything.", "我明白现在存在信息不一致。请保持工单开启并检查具体阻塞点，不要再让我重复重试。"),
             L("Please use the backend record and the evidence I've already provided to decide the next concrete action.", "请直接结合后台记录和我已经提供的证据，采取下一步具体处理动作。"),
-        ]
-        return conflict_moves[turn_count % len(conflict_moves)]
+            L("I'm okay waiting while you reconcile those records. Please come back with the concrete result rather than another generic status update.", "我可以等你把这些记录核对清楚。请直接告诉我具体结果，不要再给泛化的状态更新。"),
+        ])
 
     if any(k in low for k in ["confirmation number", "reservation number", "order number", "booking reference", "ticket number"]):
-        return L("I have the reference ready. I'll provide it now so you can continue the verification.", "我已经准备好相关编号了，我现在提供给你，请继续核实。")
+        return _unused_customer_move(state, [
+            L("I have the reference ready. I'll provide it now so you can continue the verification.", "我已经准备好相关编号了，我现在提供给你，请继续核实。"),
+            L("Here is the reference you asked for. Please use it and continue the check from there.", "这是你需要的编号，请直接用它继续核实。"),
+        ])
     if any(k in low for k in ["24", "48", "business day", "within", "timeframe", "eta"]):
-        return L("Understood. I'll wait for that timeframe; if it passes without an update, I'll come back with this case reference.", "明白了。我会等到这个时间点；如果到时还没有更新，我会带着这个工单信息再回来。")
+        return _unused_customer_move(state, [
+            L("Understood. I'll wait for that timeframe; if it passes without an update, I'll come back with this case reference.", "明白了。我会等到这个时间点；如果到时还没有更新，我会带着这个工单信息再回来。"),
+            L("That timeline works for me. Please keep the case moving and I'll watch for the update.", "这个时间线可以。我会留意后续更新，请继续推进这个问题。"),
+        ])
     if any(k in low for k in ["verify", "checking", "investigat", "look into", "review", "核实", "检查", "调查"]):
-        moves = [
+        return _unused_customer_move(state, [
             L("Please continue that check and tell me what changes once you verify the blocker.", "请继续核查，确认阻塞点后告诉我系统发生了什么变化。"),
-            L("Thanks — I'll wait while you verify it. Please use what I've already provided rather than restarting the troubleshooting.", "好的，我等你核实。请直接使用我已经提供的信息，不要重新开始排查。"),
+            L("Thanks - I'll wait while you verify it. Please use what I've already provided rather than restarting the troubleshooting.", "好的，我等你核实。请直接使用我已经提供的信息，不要重新开始排查。"),
             L("What have you verified so far, and which single check comes next?", "目前已经核实了什么？接下来最关键的一项检查是什么？"),
-        ]
-        return moves[turn_count % len(moves)]
+            L("Please finish that verification first. Once you have the result, tell me the action you can take from it.", "请先完成这项核实。拿到结果后，直接告诉我基于结果可以采取什么动作。"),
+        ])
     if any(k in low for k in ["blocker", "cause", "root cause", "preventing", "holding", "根因", "阻塞"]):
-        return L("Now that you've identified the blocker, please apply the fix instead of doing more general troubleshooting.", "既然已经找到阻塞原因，请直接采取修复动作，不要再做泛化排查。")
+        return _unused_customer_move(state, [
+            L("Now that you've identified the blocker, please apply the fix instead of doing more general troubleshooting.", "既然已经找到阻塞原因，请直接采取修复动作，不要再做泛化排查。"),
+            L("That gives me enough context. Please move from diagnosis to the actual fix now.", "这些信息已经足够了，请从诊断阶段进入实际修复。"),
+        ])
 
-    general_moves = [
+    return _unused_customer_move(state, [
         L("Please keep moving this forward and use the next system-side action that can actually change the outcome.", "请继续推进，直接采取能够真正改变结果的下一项系统侧动作。"),
         L("I've given you the relevant context. Please continue from here without making me repeat it.", "相关信息我都已经提供了，请从这里继续处理，不要让我重复说明。"),
         L("What is the one thing you still need to verify before you can act?", "在你采取行动之前，还剩哪一件最关键的事情需要核实？"),
         L("Okay, please proceed with the next concrete step and tell me the result.", "好的，请直接进行下一步具体操作，然后告诉我结果。"),
-    ]
-    return general_moves[turn_count % len(general_moves)]
+        L("I'm following. Please continue with the action that gets us closest to a verified resolution.", "我明白了。请继续采取最接近确认解决问题的下一项动作。"),
+    ])
 
 
 def _queue_manual_suggestion(suggestion: str) -> None:

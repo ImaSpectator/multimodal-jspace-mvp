@@ -10,7 +10,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # ReportLab ships CID font support; no external font file is bundled or exposed.
 try:
@@ -69,12 +69,12 @@ def build_conversation_pdf(
         "JMeta", parent=body, fontSize=8.6, leading=12, textColor=colors.HexColor("#5A6D7D"),
     )
     customer_style = ParagraphStyle(
-        "Customer", parent=body, leftIndent=22, rightIndent=4, borderColor=colors.HexColor("#B7CBE0"),
-        borderWidth=0.5, borderPadding=7, backColor=colors.HexColor("#F1F6FB"), spaceBefore=4, spaceAfter=7,
+        "Customer", parent=body, leftIndent=0, rightIndent=0, spaceBefore=0, spaceAfter=0,
+        fontSize=9.6, leading=13.8,
     )
     agent_style = ParagraphStyle(
-        "Agent", parent=body, leftIndent=4, rightIndent=22, borderColor=colors.HexColor("#C9D4E2"),
-        borderWidth=0.5, borderPadding=7, backColor=colors.HexColor("#F7F9FC"), spaceBefore=4, spaceAfter=7,
+        "Agent", parent=body, leftIndent=0, rightIndent=0, spaceBefore=0, spaceAfter=0,
+        fontSize=9.6, leading=13.8,
     )
 
     story = [
@@ -104,9 +104,22 @@ def build_conversation_pdf(
             continue
         who = _label("Customer", "客户", language) if role == "customer" else _label("Support Agent", "客服", language)
         text = escape(str(row.get("text") or "")).replace("\n", "<br/>")
-        provider = str(row.get("provider") or "").strip()
+        provider = str(row.get("provider") or "").strip().replace("·", "-")
         provider_html = f"<br/><font size='7' color='#6A7E90'>{escape(provider)}</font>" if provider and role == "agent" else ""
-        story.append(Paragraph(f"<b>{escape(who)}</b><br/>{text}{provider_html}", customer_style if role == "customer" else agent_style))
+        bubble = Paragraph(f"<b>{escape(who)}</b><br/>{text}{provider_html}", customer_style if role == "customer" else agent_style)
+        bubble_width = doc.width * 0.84
+        bubble_table = Table([[bubble]], colWidths=[bubble_width], hAlign=("RIGHT" if role == "customer" else "LEFT"))
+        bubble_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EEF5FC") if role == "customer" else colors.HexColor("#F7F9FC")),
+            ("BOX", (0, 0), (-1, -1), 0.55, colors.HexColor("#B7CBE0") if role == "customer" else colors.HexColor("#C9D4E2")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(bubble_table)
+        story.append(Spacer(1, 7))
 
     if analysis:
         story.extend([Spacer(1, 10), Paragraph(_label("Conversation analysis", "对话分析", language), h2)])

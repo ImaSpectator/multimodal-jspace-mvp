@@ -10,19 +10,19 @@ def _source():
 
 def test_v11_borderless_toolbar_and_link_icon():
     source = _source()
-    assert 'APP_VERSION = "1.2.0-export-analysis"' in source
+    assert 'APP_VERSION = "1.3-closing-toolbar-pdf"' in source
     assert ':material/link:' in source
     assert 'background:transparent!important; box-shadow:none!important;' in source
-    assert 'border:0!important; border-radius:8px!important;' in source
+    assert 'border:0!important' in source
     assert 'align-items:center!important; justify-content:center!important;' in source
 
 
 def test_v11_suggested_moves_are_not_question_only():
     source = _source()
-    assert 'Suggest the customer\'s next *move*, not just another question.' in source
+    assert 'Suggest the customer\'s next move, including a deterministic natural closing.' in source
     assert 'Please go ahead with the concrete fix' in source
     assert 'please skip the repeats and move to the next system-side check' in source
-    assert 'That works on my side now. I don\'t have any other concerns' in source
+    assert "Everything looks good now. That's all I needed" in source
 
 
 def test_v11_chinese_concepts_have_name_and_value_localization():

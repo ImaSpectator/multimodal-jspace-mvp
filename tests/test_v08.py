@@ -344,7 +344,7 @@ def test_v082_chinese_prompt_and_fallback_are_language_aware():
 
 def test_v082_readme_profiles_are_current_and_no_secret_setup_section():
     text = (Path(__file__).parents[1] / "README.md").read_text()
-    assert "# JSpace Live — v1.2" in text
+    assert "# JSpace Live — v1.3" in text
     assert "**Fast** | 12 seconds | Up to 2 | 4 recent messages | 12 seconds" in text
     assert "**Balanced** | 20 seconds | Up to 2 | 6 recent messages | 20 seconds" in text
     assert "**Concise** — up to 120 output tokens" in text
@@ -401,7 +401,7 @@ def test_v09_chinese_scenario_fallback_and_dynamic_prompts():
     assert 'Guarantee Chinese customer-facing scenario text' in source
     assert '客户当前遇到一个需要客服核实' in source or '客户看到的信息与公司系统记录存在差异' in source
     assert 'last_agent = next(' in source
-    assert 'turn_count = sum(1 for row in state.transcript if row.get("role") == "agent")' in source
+    assert 'def _unused_customer_move(state, candidates: list[str])' in source
     assert '请继续核查，确认阻塞点后告诉我系统发生了什么变化' in source
 
 

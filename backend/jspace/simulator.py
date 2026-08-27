@@ -304,7 +304,15 @@ def apply_manual_customer_message(
     if media_concepts:
         merge_concepts(state.concepts, media_concepts)
     _maybe_advance_manual_resolution(state, text)
-    if state.session_phase == "resolved" and any(token in text.lower() for token in ["no other", "nothing else", "that's all", "thats all", "没有其他", "没别的", "就这些"]):
+    closing_tokens = [
+        "no other", "nothing else", "that's all", "thats all", "all i needed", "thank you", "thanks", "have a good day", "bye",
+        "没有其他", "没别的", "就这些", "没有别的问题", "谢谢", "再见", "祝你", "都正常了",
+    ]
+    customer_is_closing = any(token in text.lower() for token in closing_tokens)
+    if customer_is_closing and (
+        state.session_phase == "resolved"
+        or (not state.conflicts and state.customer_satisfaction >= 76)
+    ):
         state.session_phase = "closing"
     return refresh_state(state)
 
