@@ -39,7 +39,7 @@ from backend.jspace.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.8.2-tencent-multimodal"
+APP_VERSION = "0.8.2.1-tencent-multimodal"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -207,49 +207,41 @@ a.anchor-link, [data-testid="stMarkdownContainer"] h1 > a, [data-testid="stMarkd
 hr { border-color:rgba(140,175,215,.12)!important; }
 @media(max-width:1000px){ .j-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.j-node-grid{grid-template-columns:1fr 1fr}.j-title{font-size:1.72rem}.j-msg{max-width:94%} }
 
-/* Compact top-right utility toolbar. Material glyphs are absolutely centered
-   inside fixed square buttons so Streamlit label/icon wrappers cannot shift them. */
-.st-key-utility_toolbar { margin-top:-.15rem; margin-bottom:.42rem; }
-.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.30rem!important; }
+/* Compact top-right utility toolbar. Use icon-only buttons so labels never wrap vertically. */
+.st-key-utility_toolbar { margin-top:-.08rem; margin-bottom:.48rem; }
+.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.38rem!important; }
 .st-key-utility_toolbar [data-testid="column"]:first-child { flex:1 1 auto!important; min-width:0!important; }
 .st-key-utility_toolbar [data-testid="column"]:nth-child(2) {
-  flex:0 0 3.25rem!important; width:3.25rem!important; min-width:3.25rem!important; max-width:3.25rem!important;
+  flex:0 0 3.65rem!important; width:3.65rem!important; min-width:3.65rem!important; max-width:3.65rem!important;
 }
 .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) {
-  flex:0 0 2.34rem!important; width:2.34rem!important; min-width:2.34rem!important; max-width:2.34rem!important;
+  flex:0 0 2.70rem!important; width:2.70rem!important; min-width:2.70rem!important; max-width:2.70rem!important;
 }
 .st-key-utility_toolbar .stButton { margin:0!important; width:100%!important; }
 .st-key-utility_toolbar .stButton > button {
-  position:relative!important; width:100%!important; min-width:0!important; max-width:none!important;
-  height:2.34rem!important; min-height:2.34rem!important; padding:0!important; gap:0!important; line-height:1!important;
-  border-radius:11px!important; border:1px solid rgba(93,245,255,.24)!important;
+  position:relative!important; width:100%!important; height:2.70rem!important; min-height:2.70rem!important; padding:0!important;
+  border-radius:13px!important; border:1px solid rgba(93,245,255,.24)!important;
   background:linear-gradient(145deg,rgba(14,29,49,.94),rgba(8,17,31,.94))!important;
   color:#DFF8FF!important; box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 7px 20px rgba(0,0,0,.15)!important;
-  overflow:hidden!important; transition:.16s ease!important;
+  transition:.16s ease!important;
 }
 .st-key-utility_toolbar .stButton > button:hover {
   transform:translateY(-1px); border-color:rgba(93,245,255,.55)!important;
   background:linear-gradient(145deg,rgba(18,43,65,.98),rgba(13,25,45,.98))!important;
   box-shadow:0 8px 24px rgba(58,177,220,.12),inset 0 1px 0 rgba(255,255,255,.06)!important;
 }
-.st-key-utility_toolbar .stButton > button:active { transform:translateY(0); }
-.st-key-utility_toolbar .stButton > button > div { position:absolute!important; inset:0!important; display:block!important; width:100%!important; height:100%!important; margin:0!important; }
-.st-key-utility_toolbar .stButton > button p { display:none!important; margin:0!important; }
-.st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
-  position:absolute!important; left:50%!important; top:50%!important;
-  transform:translate(-50%,-50%)!important; display:block!important;
-  font-size:1.12rem!important; width:1.12rem!important; height:1.12rem!important;
-  line-height:1.12rem!important; margin:0!important; padding:0!important; text-align:center!important;
+.st-key-utility_toolbar .stButton > button p {
+  margin:0!important; font-size:.78rem!important; font-weight:800!important; letter-spacing:.01em!important;
+  white-space:nowrap!important; line-height:1!important;
 }
-.st-key-top_language .stButton > button p {
-  display:block!important; position:absolute!important; left:50%!important; top:50%!important;
-  transform:translate(-50%,-50%)!important; margin:0!important; font-size:.71rem!important;
-  font-weight:850!important; letter-spacing:.015em!important; white-space:nowrap!important; line-height:1!important;
+.st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
+  position:absolute!important; left:50%!important; top:50%!important; transform:translate(-50%,-50%)!important;
+  font-size:1.16rem!important; width:1.16rem!important; height:1.16rem!important; line-height:1.16rem!important;
 }
 @media(max-width:700px){
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:3rem!important;width:3rem!important;min-width:3rem!important;max-width:3rem!important;}
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.22rem!important;width:2.22rem!important;min-width:2.22rem!important;max-width:2.22rem!important;}
-  .st-key-utility_toolbar .stButton>button{height:2.22rem!important;min-height:2.22rem!important;}
+  .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:3.35rem!important;width:3.35rem!important;min-width:3.35rem!important;max-width:3.35rem!important;}
+  .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.45rem!important;width:2.45rem!important;min-width:2.45rem!important;max-width:2.45rem!important;}
+  .st-key-utility_toolbar .stButton>button{height:2.45rem!important;min-height:2.45rem!important;}
 }
 /* Manual composer stays visually attached to the conversation. The actual text entry
    is a Streamlit form so Enter and Send behave identically; the suggestion lives beside it. */
@@ -532,7 +524,7 @@ def _toggle_language() -> None:
 
 
 with st.container(key="utility_toolbar"):
-    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .070, .043, .043, .043, .043], gap="small", vertical_alignment="center")
+    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .10, .055, .055, .055, .055], gap="small", vertical_alignment="center")
     with lang_col:
         st.button(
             "中文" if not _is_zh() else "EN",
@@ -540,18 +532,18 @@ with st.container(key="utility_toolbar"):
             key="top_language", width="stretch", on_click=_toggle_language,
         )
     with u1:
-        if st.button("Help", icon=":material/help:", help=L("Help", "帮助"), key="top_help", width="stretch"):
+        if st.button(" ", icon=":material/help:", help=L("Help", "帮助"), key="top_help", width="stretch"):
             _help_dialog()
     with u2:
-        if st.button("Share", icon=":material/share:", help=L("Share", "分享"), key="top_share", width="stretch"):
+        if st.button(" ", icon=":material/share:", help=L("Share", "分享"), key="top_share", width="stretch"):
             _share_dialog()
     with u3:
-        if st.button("Reset", icon=":material/refresh:", help=L("Reset current sessions", "重置当前会话"), key="top_reset", width="stretch"):
+        if st.button(" ", icon=":material/refresh:", help=L("Reset current sessions", "重置当前会话"), key="top_reset", width="stretch"):
             _bump_generation_epoch()
             reset_sessions()
             st.rerun()
     with u4:
-        if st.button("Settings", icon=":material/settings:", help=L("Settings", "设置"), key="top_settings", width="stretch"):
+        if st.button(" ", icon=":material/settings:", help=L("Settings", "设置"), key="top_settings", width="stretch"):
             _settings_dialog()
 
 st.markdown("<div style=\"height:.65rem\"></div>", unsafe_allow_html=True)
@@ -980,15 +972,27 @@ if scenario_tab.open:
                 scenario_provider = L("Curated scenario · instant", "预设场景 · 即时")
                 if AI_CONNECTED and (st.session_state.get("settings_scenario_ai", True) or _is_zh()):
                     cfg = _ai_runtime()
-                    scenario, scenario_provider = enhance_scenario_with_deepseek(
-                        scenario,
-                        api_key=TOKENHUB_API_KEY,
-                        model=TOKENHUB_MODEL,
-                        base_url=TOKENHUB_BASE_URL,
-                        channel=CHANNELS[channel_label]["slug"],
-                        timeout_s=cfg["scenario_timeout_ms"] / 1000.0,
-                        language=_language_prompt_name(),
-                    )
+                    try:
+                        scenario, scenario_provider = enhance_scenario_with_deepseek(
+                            scenario,
+                            api_key=TOKENHUB_API_KEY,
+                            model=TOKENHUB_MODEL,
+                            base_url=TOKENHUB_BASE_URL,
+                            channel=CHANNELS[channel_label]["slug"],
+                            timeout_s=cfg["scenario_timeout_ms"] / 1000.0,
+                            language=_language_prompt_name(),
+                        )
+                    except TypeError:
+                        # Backward-compatible retry in case a stale deployment still has the
+                        # earlier helper signature without the language keyword.
+                        scenario, scenario_provider = enhance_scenario_with_deepseek(
+                            scenario,
+                            api_key=TOKENHUB_API_KEY,
+                            model=TOKENHUB_MODEL,
+                            base_url=TOKENHUB_BASE_URL,
+                            channel=CHANNELS[channel_label]["slug"],
+                            timeout_s=cfg["scenario_timeout_ms"] / 1000.0,
+                        )
                 scenario = prepare_scenario_for_channel(scenario, channel_label)
             if int(st.session_state.get("generation_epoch", 0)) == epoch:
                 st.session_state.live_scenario = scenario
