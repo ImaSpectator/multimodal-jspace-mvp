@@ -4,7 +4,6 @@ import html
 import inspect
 import os
 import sys
-import urllib.parse
 from copy import deepcopy
 from pathlib import Path
 
@@ -40,7 +39,7 @@ from backend.jspace.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.9.0-manual-ux-language"
+APP_VERSION = "1.0.0-stable-manual-ux"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -236,14 +235,14 @@ hr { border-color:rgba(140,175,215,.12)!important; }
 .st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.38rem!important; }
 .st-key-utility_toolbar [data-testid="column"]:first-child { flex:1 1 auto!important; min-width:0!important; }
 .st-key-utility_toolbar [data-testid="column"]:nth-child(2) {
-  flex:0 0 3.65rem!important; width:3.65rem!important; min-width:3.65rem!important; max-width:3.65rem!important;
+  flex:0 0 3.35rem!important; width:3.35rem!important; min-width:3.35rem!important; max-width:3.35rem!important;
 }
 .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) {
-  flex:0 0 2.70rem!important; width:2.70rem!important; min-width:2.70rem!important; max-width:2.70rem!important;
+  flex:0 0 2.62rem!important; width:2.62rem!important; min-width:2.62rem!important; max-width:2.62rem!important;
 }
 .st-key-utility_toolbar .stButton { margin:0!important; width:100%!important; }
 .st-key-utility_toolbar .stButton > button {
-  position:relative!important; width:100%!important; height:2.70rem!important; min-height:2.70rem!important; padding:0!important;
+  position:relative!important; width:100%!important; height:2.62rem!important; min-height:2.62rem!important; padding:0!important;
   border-radius:13px!important; border:1px solid rgba(93,245,255,.24)!important;
   background:linear-gradient(145deg,rgba(14,29,49,.94),rgba(8,17,31,.94))!important;
   color:#DFF8FF!important; box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 7px 20px rgba(0,0,0,.15)!important;
@@ -267,12 +266,13 @@ hr { border-color:rgba(140,175,215,.12)!important; }
 .st-key-top_reset .stButton > button p,
 .st-key-top_settings .stButton > button p { display:none!important; }
 .st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
-  position:static!important; transform:none!important; display:block!important;
-  font-size:1.16rem!important; width:1.16rem!important; height:1.16rem!important; line-height:1.16rem!important;
-  margin:0!important; padding:0!important; text-align:center!important;
+  position:absolute!important; inset:0!important; transform:none!important;
+  display:flex!important; align-items:center!important; justify-content:center!important;
+  width:100%!important; height:100%!important; line-height:1!important;
+  font-size:1.12rem!important; margin:0!important; padding:0!important; text-align:center!important;
 }
 .st-key-top_language .stButton > button > div { display:flex!important; align-items:center!important; justify-content:center!important; }
-.st-key-top_language .stButton > button p { display:block!important; margin:0!important; width:auto!important; text-align:center!important; }
+.st-key-top_language .stButton > button p { display:flex!important; align-items:center!important; justify-content:center!important; margin:0!important; width:100%!important; height:100%!important; text-align:center!important; line-height:1!important; }
 @media(max-width:700px){
   .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:3.35rem!important;width:3.35rem!important;min-width:3.35rem!important;max-width:3.35rem!important;}
   .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.45rem!important;width:2.45rem!important;min-width:2.45rem!important;max-width:2.45rem!important;}
@@ -491,6 +491,7 @@ def _init_preferences() -> None:
         "settings_reply": "Concise",
         "settings_scenario_ai": True,
         "settings_auto_scroll": True,
+        "settings_researcher_view": False,
         "ui_language": "English",
         "generation_epoch": 0,
     }
@@ -599,19 +600,28 @@ def _help_dialog() -> None:
     ))
 
 
-@st.dialog("Share" if not _is_zh() else "分享", width="small")
-def _share_dialog() -> None:
-    st.markdown(L("**Email this experience**", "**通过邮件分享**"))
-    share_url = st.text_input(L("Public app link", "公开应用链接"), value=PUBLIC_APP_URL, placeholder="https://your-app.streamlit.app", key="share_url")
-    recipient = st.text_input(L("Recipient email", "收件人邮箱"), placeholder="name@example.com", key="share_email")
-    if share_url and recipient and "@" in recipient:
-        subject = urllib.parse.quote("Try JSpace Live" if not _is_zh() else "体验 JSpace Live")
-        body_text = f"I wanted to share this JSpace customer-service experience with you:\n\n{share_url}" if not _is_zh() else f"想和你分享这个 JSpace 客服体验：\n\n{share_url}"
-        body = urllib.parse.quote(body_text)
-        st.link_button(L("Email link", "打开邮件"), f"mailto:{urllib.parse.quote(recipient)}?subject={subject}&body={body}", width="stretch")
-        st.caption(L("This opens your email app; you press Send there.", "这会打开你的邮件应用，最后由你点击发送。"))
-    elif recipient and "@" not in recipient:
-        st.caption(L("Enter a valid email address.", "请输入有效的邮箱地址。"))
+def _copy_current_link() -> None:
+    """Copy the live app URL to the clipboard; no email/share workflow."""
+    components.html(
+        """<script>
+        (async function(){
+          try {
+            const url = window.parent.location.href;
+            await window.parent.navigator.clipboard.writeText(url);
+          } catch (e) {
+            try {
+              const url = window.parent.location.href;
+              const ta = window.parent.document.createElement('textarea');
+              ta.value = url; ta.style.position='fixed'; ta.style.opacity='0';
+              window.parent.document.body.appendChild(ta); ta.select();
+              window.parent.document.execCommand('copy'); ta.remove();
+            } catch (_) {}
+          }
+        })();
+        </script>""",
+        height=0,
+    )
+    st.toast(L("Link copied to clipboard", "链接已复制到剪贴板"), icon="✅")
 
 
 @st.dialog("Settings" if not _is_zh() else "设置", width="small")
@@ -624,6 +634,7 @@ def _settings_dialog() -> None:
     st.selectbox(L("Agent reply length", "客服回复长度"), ["Concise", "Standard"], key="settings_reply")
     st.toggle(L("Use DeepSeek to vary scenario wording", "使用 DeepSeek 改写场景措辞"), key="settings_scenario_ai", help=L("Turn this off for near-instant curated scenario generation.", "关闭后会直接使用预设场景，生成速度更快。"))
     st.toggle(L("Auto-scroll conversations", "对话自动滚动到底部"), key="settings_auto_scroll")
+    st.toggle(L("Enable Researcher View", "启用研究者视图"), key="settings_researcher_view", help=L("Shows hidden simulated ground truth and provider diagnostics. Off by default.", "显示隐藏的模拟真值和模型诊断信息。默认关闭。"))
     cfg = _ai_runtime()
     st.caption(L(
         f"Text/image: {TOKENHUB_MODEL} · Audio: {TOKENHUB_AUDIO_MODEL} · Video: {TOKENHUB_VIDEO_MODEL}",
@@ -654,7 +665,7 @@ def _toggle_language() -> None:
 
 
 with st.container(key="utility_toolbar"):
-    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .085, .058, .058, .058, .058], gap="small", vertical_alignment="center")
+    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .078, .054, .054, .054, .054], gap="small", vertical_alignment="center")
     with lang_col:
         st.button(
             "中文" if not _is_zh() else "EN",
@@ -665,8 +676,8 @@ with st.container(key="utility_toolbar"):
         if st.button(" ", icon=":material/help:", help=L("Help", "帮助"), key="top_help", width="stretch"):
             _help_dialog()
     with u2:
-        if st.button(" ", icon=":material/share:", help=L("Share", "分享"), key="top_share", width="stretch"):
-            _share_dialog()
+        if st.button(" ", icon=":material/content_copy:", help=L("Copy page link", "复制页面链接"), key="top_share", width="stretch"):
+            _copy_current_link()
     with u3:
         if st.button(" ", icon=":material/refresh:", help=L("Reset current sessions", "重置当前会话"), key="top_reset", width="stretch"):
             _bump_generation_epoch()
@@ -1014,9 +1025,14 @@ def suggested_customer_prompt(domain: str, state) -> str:
     return variants[turn_count % len(variants)]
 
 
-def _use_manual_suggestion(suggestion: str) -> None:
-    """Prefill the manual chat widget on the next rerun."""
-    st.session_state["manual_chat_input"] = suggestion
+def _queue_manual_suggestion(suggestion: str) -> None:
+    """Queue a prompt before the chat widget is instantiated on the next rerun.
+
+    Streamlit forbids changing a widget's session-state value after that widget has
+    already been created in the current run. Writing to a separate staging key avoids
+    that API exception entirely.
+    """
+    st.session_state["manual_chat_prefill"] = suggestion
 
 
 def render_start_here(domains: list[str]) -> None:
@@ -1049,7 +1065,7 @@ def render_start_here(domains: list[str]) -> None:
         (L("Satisfaction", "满意度"), L("A dynamic interaction-quality signal that rises with useful progress/resolution and falls when the exchange remains confusing or unhelpful.", "动态交互质量信号；当对话取得有效进展或解决问题时上升，持续混乱或无帮助时下降。")),
         (L("Priority", "优先级"), L("The ranking used to decide what survives Top-K: relevance, confidence, conflict importance and recency.", "决定哪些概念保留在 Top-K 中的排序信号：相关性、置信度、冲突重要性和时效性。")),
         (L("Evidence & provenance", "证据与来源"), L("Where each active concept came from — text, audio, image/video, backend systems, or derived reasoning.", "每个活跃概念来自哪里：文字、音频、图像/视频、后台系统或推导。")),
-        (L("Researcher view", "研究者视图"), L("Hidden simulated company truth and provider diagnostics. Closed by default because a real customer would not see it.", "隐藏的模拟公司真值和提供方诊断信息。默认关闭，因为真实客户不会看到这些信息。")),
+        (L("Researcher view", "研究者视图"), L("Hidden simulated company truth and provider diagnostics. Enable it explicitly in Settings.", "隐藏的模拟公司真值和提供方诊断信息。需要在设置中主动启用。")),
     ]
     cols = st.columns(3)
     for i, (name, desc) in enumerate(terms):
@@ -1201,10 +1217,6 @@ if scenario_tab.open:
                 conversation_slot = st.empty()
                 render_conversation(state.transcript, live_channel, slot=conversation_slot)
                 st.caption(L("Scrollable conversation · newest turn stays in view.", "对话可滚动 · 自动跟随最新一轮消息。"))
-                if st.session_state.get("live_started", False) and not state.session_ended:
-                    completed_turns = min(next_step, len(scenario.steps))
-                    st.caption(L(f"Scenario progress · {completed_turns}/{len(scenario.steps)} customer turns revealed", f"场景进度 · 已展示 {completed_turns}/{len(scenario.steps)} 轮客户消息"))
-
                 if not st.session_state.get("live_started", False) and not state.session_ended:
                     start_c, end_c = st.columns([3, 1])
                     if start_c.button(L("Start conversation ▶", "开始对话 ▶"), type="primary", use_container_width=True, key="start_live"):
@@ -1243,16 +1255,16 @@ if scenario_tab.open:
             with workspace_col:
                 render_workspace(state, show_coaching=True)
 
-            with st.expander(L("Researcher view · scenario ground truth", "研究者视图 · 场景真值"), expanded=False):
-                st.write(L("**Domain:**", "**领域：**"), display_domain(scenario.domain))
-                st.write(L("**Problem summary:**", "**问题摘要：**"), scenario.problem_summary)
-                st.write(L("**Random conflict present:**", "**是否存在随机冲突：**"), scenario.expected_conflict)
-                st.write(L("**Hidden ground truth:**", "**隐藏真值：**"), scenario.hidden_ground_truth)
-                st.write(L("**Scenario language source:**", "**场景语言来源：**"), st.session_state.get("live_scenario_provider", L("Curated scenario", "预设场景")))
-                st.write(L("**Seed:**", "**随机种子：**"), scenario.seed)
-                st.write(L("**Planned customer turns:**", "**计划客户轮数：**"), len(scenario.steps))
-                providers = [r.get("provider") for r in state.transcript if r.get("role") == "agent"]
-                st.write(L("**Agent providers:**", "**客服模型来源：**"), providers)
+            if st.session_state.get("settings_researcher_view", False):
+                with st.expander(L("Researcher view · scenario ground truth", "研究者视图 · 场景真值"), expanded=False):
+                    st.write(L("**Domain:**", "**领域：**"), display_domain(scenario.domain))
+                    st.write(L("**Problem summary:**", "**问题摘要：**"), scenario.problem_summary)
+                    st.write(L("**Random conflict present:**", "**是否存在随机冲突：**"), scenario.expected_conflict)
+                    st.write(L("**Hidden ground truth:**", "**隐藏真值：**"), scenario.hidden_ground_truth)
+                    st.write(L("**Scenario language source:**", "**场景语言来源：**"), st.session_state.get("live_scenario_provider", L("Curated scenario", "预设场景")))
+                    st.write(L("**Seed:**", "**随机种子：**"), scenario.seed)
+                    providers = [r.get("provider") for r in state.transcript if r.get("role") == "agent"]
+                    st.write(L("**Agent providers:**", "**客服模型来源：**"), providers)
 
 if manual_tab.open:
     with manual_tab:
@@ -1301,6 +1313,9 @@ if manual_tab.open:
                     suggestion = suggested_customer_prompt(active_manual_domain, manual_state) if mode_cfg["show_suggestion"] else ""
                     if st.session_state.pop("manual_input_reset_pending", False):
                         st.session_state["manual_chat_input"] = ""
+                    queued_prefill = st.session_state.pop("manual_chat_prefill", None)
+                    if queued_prefill is not None:
+                        st.session_state["manual_chat_input"] = queued_prefill
                     st.session_state.setdefault("manual_chat_input", "")
 
                     prompt = ""
@@ -1326,14 +1341,14 @@ if manual_tab.open:
                                         f'<div class="j-suggest-mini"><strong>{L("Suggested prompt", "建议提示")}</strong><br>{html.escape(suggestion)}</div>',
                                         unsafe_allow_html=True,
                                     )
-                                    if st.button(
+                                    st.button(
                                         L("Use prompt", "填入输入框"),
                                         key="use_manual_suggestion",
                                         use_container_width=True,
                                         help=L("Fill the chat box immediately; then press Enter or Send.", "立即填入聊天框，然后按 Enter 或点击发送。"),
-                                    ):
-                                        st.session_state["manual_chat_input"] = suggestion
-                                        st.rerun()
+                                        on_click=_queue_manual_suggestion,
+                                        args=(suggestion,),
+                                    )
                     else:
                         st.markdown(
                             f'<div class="j-suggest-mini"><strong>{L("Selected input mode", "当前输入模式")}</strong><br>{html.escape(channel_hint(active_manual_channel))}</div>',
@@ -1344,7 +1359,14 @@ if manual_tab.open:
                     video_url = ""
                     allowed_types = mode_cfg["file_types"]
                     if allowed_types or mode_cfg["allow_video_url"]:
-                        with st.expander(L("Add evidence for this turn (optional)", "为本轮添加证据（可选）"), expanded=False):
+                        evidence_title = {
+                            "Image Upload": L("Image evidence", "图片证据"),
+                            "Audio Upload": L("Audio evidence", "音频证据"),
+                            "Video Upload": L("Video evidence", "视频证据"),
+                            "Multimodal Mix": L("Multimodal evidence", "多模态证据"),
+                        }.get(active_manual_channel, L("Evidence for this turn", "本轮证据"))
+                        with st.expander(evidence_title, expanded=True):
+                            st.caption(channel_hint(active_manual_channel))
                             if allowed_types:
                                 media_files = st.file_uploader(
                                     L("Attach evidence for this turn", "为本轮添加证据"),
@@ -1356,7 +1378,7 @@ if manual_tab.open:
                                     st.caption(L("Attached: ", "已添加：") + ", ".join(f.name for f in media_files))
                             if mode_cfg["allow_video_url"]:
                                 video_url = st.text_input(
-                                    L("Public video URL (optional)", "公开视频 URL（可选）"),
+                                    L("Public video URL", "公开视频 URL"),
                                     key=f"manual_video_url_{st.session_state.get('manual_media_key', 0)}",
                                     placeholder="https://.../clip.mp4",
                                     help=L("A public URL is the most reliable YT-VITA path; local uploads use a best-effort data URL.", "公开 URL 是 YT-VITA 最可靠的方式；本地上传会尝试使用 data URL。"),
@@ -1392,16 +1414,17 @@ if manual_tab.open:
             with workspace_col:
                 render_workspace(manual_state, show_coaching=False)
 
-            with st.expander(L("Researcher view · simulated company context", "研究者视图 · 模拟公司上下文"), expanded=False):
-                st.write(L("**Domain:**", "**领域：**"), display_domain(active_manual_domain))
-                st.write(L("**Channel:**", "**渠道：**"), display_channel(active_manual_channel))
-                st.write(L("**Company-system events:**", "**公司系统事件：**"), manual_state.backend_history)
-                st.write(L("**AI connected:**", "**AI 是否连接：**"), AI_CONNECTED)
-                st.write(L("**Provider:**", "**提供方：**"), "Tencent TokenHub")
-                st.write(L("**Text + image model:**", "**文字 + 图像模型：**"), TOKENHUB_MODEL)
-                st.write(L("**Audio transcription:**", "**音频转写：**"), TOKENHUB_AUDIO_MODEL)
-                st.write(L("**Video understanding:**", "**视频理解：**"), TOKENHUB_VIDEO_MODEL)
-                st.write(L("**Agent providers:**", "**客服模型来源：**"), [r.get("provider") for r in manual_state.transcript if r.get("role") == "agent"])
+            if st.session_state.get("settings_researcher_view", False):
+                with st.expander(L("Researcher view · simulated company context", "研究者视图 · 模拟公司上下文"), expanded=False):
+                    st.write(L("**Domain:**", "**领域：**"), display_domain(active_manual_domain))
+                    st.write(L("**Channel:**", "**渠道：**"), display_channel(active_manual_channel))
+                    st.write(L("**Company-system events:**", "**公司系统事件：**"), manual_state.backend_history)
+                    st.write(L("**AI connected:**", "**AI 是否连接：**"), AI_CONNECTED)
+                    st.write(L("**Provider:**", "**提供方：**"), "Tencent TokenHub")
+                    st.write(L("**Text + image model:**", "**文字 + 图像模型：**"), TOKENHUB_MODEL)
+                    st.write(L("**Audio transcription:**", "**音频转写：**"), TOKENHUB_AUDIO_MODEL)
+                    st.write(L("**Video understanding:**", "**视频理解：**"), TOKENHUB_VIDEO_MODEL)
+                    st.write(L("**Agent providers:**", "**客服模型来源：**"), [r.get("provider") for r in manual_state.transcript if r.get("role") == "agent"])
         else:
             st.info(L("Choose a domain/channel and start a session. Multimodal Mix gives the richest demonstration of conflicting evidence across modalities.", "选择领域和渠道并开始会话。多模态混合模式最适合展示不同模态之间的证据冲突。"))
 

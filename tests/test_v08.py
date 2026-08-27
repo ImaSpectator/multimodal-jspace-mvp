@@ -302,9 +302,11 @@ def test_top_controls_precede_hero_in_source():
 def test_v082_toolbar_uses_compact_centered_material_buttons_and_dialogs():
     source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
     assert '@st.dialog("Help"' in source
-    assert '@st.dialog("Share"' in source
+    assert 'def _copy_current_link()' in source
+    assert 'navigator.clipboard.writeText' in source
+    assert 'mailto:' not in source
     assert '@st.dialog("Settings"' in source
-    for icon in (":material/help:", ":material/share:", ":material/refresh:", ":material/settings:"):
+    for icon in (":material/help:", ":material/content_copy:", ":material/refresh:", ":material/settings:"):
         assert icon in source
     assert 'with st.popover("❔"' not in source
     assert 'with st.popover("↗"' not in source
@@ -319,14 +321,15 @@ def test_v082_manual_composer_scroll_and_bilingual_controls():
     assert 'with st.form("manual_chat_form"' in source
     assert 'st.form_submit_button' in source
     assert 'key="use_manual_suggestion"' in source
-    assert 'st.session_state["manual_chat_input"] = suggestion' in source
+    assert 'on_click=_queue_manual_suggestion' in source
+    assert 'manual_chat_prefill' in source
     assert 'Fill the chat box immediately; then press Enter or Send.' in source
     assert 'height:min(58vh,590px)' in source
     assert 'overflow-y:scroll' in source
     assert 'settings_auto_scroll' in source
     assert 'ui_language' in source
     assert 'Simplified Chinese' in source
-    assert 'Scenario progress' in source
+    assert 'Scenario progress' not in source
     assert 'MANUAL_MODE_CONFIG' in source
     assert '"Image Upload"' in source and '"Audio Upload"' in source and '"Video Upload"' in source
 
@@ -341,7 +344,7 @@ def test_v082_chinese_prompt_and_fallback_are_language_aware():
 
 def test_v082_readme_profiles_are_current_and_no_secret_setup_section():
     text = (Path(__file__).parents[1] / "README.md").read_text()
-    assert "# JSpace Live — v0.9" in text
+    assert "# JSpace Live — v1.0" in text
     assert "**Fast** | 12 seconds | Up to 2 | 4 recent messages | 12 seconds" in text
     assert "**Balanced** | 20 seconds | Up to 2 | 6 recent messages | 20 seconds" in text
     assert "**Concise** — up to 120 output tokens" in text
