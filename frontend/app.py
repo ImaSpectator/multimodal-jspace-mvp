@@ -37,9 +37,10 @@ from backend.jspace.simulator import (  # noqa: E402
     end_scenario_session,
     new_manual_state,
     new_scenario_state,
+    update_customer_relationship,
 )
 
-APP_VERSION = "1.0.0-stable-manual-ux"
+APP_VERSION = "1.1.0-behavior-polish"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -230,33 +231,21 @@ a.anchor-link, [data-testid="stMarkdownContainer"] h1 > a, [data-testid="stMarkd
 hr { border-color:rgba(140,175,215,.12)!important; }
 @media(max-width:1000px){ .j-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.j-node-grid{grid-template-columns:1fr 1fr}.j-title{font-size:1.72rem}.j-msg{max-width:94%} }
 
-/* Compact top-right utility toolbar. Use icon-only buttons so labels never wrap vertically. */
-.st-key-utility_toolbar { margin-top:-.08rem; margin-bottom:.48rem; }
-.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.38rem!important; }
+/* v1.1 website-style top-right toolbar: borderless controls with exact centering. */
+.st-key-utility_toolbar { margin-top:-.10rem; margin-bottom:.42rem; }
+.st-key-utility_toolbar [data-testid="stHorizontalBlock"] { align-items:center!important; gap:.12rem!important; }
 .st-key-utility_toolbar [data-testid="column"]:first-child { flex:1 1 auto!important; min-width:0!important; }
-.st-key-utility_toolbar [data-testid="column"]:nth-child(2) {
-  flex:0 0 3.35rem!important; width:3.35rem!important; min-width:3.35rem!important; max-width:3.35rem!important;
-}
-.st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) {
-  flex:0 0 2.62rem!important; width:2.62rem!important; min-width:2.62rem!important; max-width:2.62rem!important;
-}
+.st-key-utility_toolbar [data-testid="column"]:nth-child(2) { flex:0 0 3.15rem!important; width:3.15rem!important; min-width:3.15rem!important; max-width:3.15rem!important; }
+.st-key-utility_toolbar [data-testid="column"]:nth-child(n+3) { flex:0 0 2.42rem!important; width:2.42rem!important; min-width:2.42rem!important; max-width:2.42rem!important; }
 .st-key-utility_toolbar .stButton { margin:0!important; width:100%!important; }
 .st-key-utility_toolbar .stButton > button {
-  position:relative!important; width:100%!important; height:2.62rem!important; min-height:2.62rem!important; padding:0!important;
-  border-radius:13px!important; border:1px solid rgba(93,245,255,.24)!important;
-  background:linear-gradient(145deg,rgba(14,29,49,.94),rgba(8,17,31,.94))!important;
-  color:#DFF8FF!important; box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 7px 20px rgba(0,0,0,.15)!important;
-  transition:.16s ease!important;
+  position:relative!important; width:100%!important; height:2.42rem!important; min-height:2.42rem!important;
+  padding:0!important; margin:0!important; border:0!important; border-radius:999px!important;
+  background:transparent!important; box-shadow:none!important; color:#DDEAF7!important;
+  display:flex!important; align-items:center!important; justify-content:center!important; transition:.14s ease!important;
 }
-.st-key-utility_toolbar .stButton > button:hover {
-  transform:translateY(-1px); border-color:rgba(93,245,255,.55)!important;
-  background:linear-gradient(145deg,rgba(18,43,65,.98),rgba(13,25,45,.98))!important;
-  box-shadow:0 8px 24px rgba(58,177,220,.12),inset 0 1px 0 rgba(255,255,255,.06)!important;
-}
-.st-key-utility_toolbar .stButton > button p {
-  margin:0!important; font-size:.78rem!important; font-weight:800!important; letter-spacing:.01em!important;
-  white-space:nowrap!important; line-height:1!important;
-}
+.st-key-utility_toolbar .stButton > button:hover { background:rgba(117,160,205,.10)!important; color:#F4FBFF!important; transform:none!important; }
+.st-key-utility_toolbar .stButton > button:focus-visible { outline:1px solid rgba(93,245,255,.52)!important; outline-offset:1px!important; }
 .st-key-utility_toolbar .stButton > button > div {
   position:absolute!important; inset:0!important; width:100%!important; height:100%!important;
   display:flex!important; align-items:center!important; justify-content:center!important; gap:0!important; margin:0!important; padding:0!important;
@@ -264,19 +253,21 @@ hr { border-color:rgba(140,175,215,.12)!important; }
 .st-key-top_help .stButton > button p,
 .st-key-top_share .stButton > button p,
 .st-key-top_reset .stButton > button p,
-.st-key-top_settings .stButton > button p { display:none!important; }
+.st-key-top_settings .stButton > button p { display:none!important; width:0!important; height:0!important; margin:0!important; padding:0!important; }
 .st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
-  position:absolute!important; inset:0!important; transform:none!important;
-  display:flex!important; align-items:center!important; justify-content:center!important;
-  width:100%!important; height:100%!important; line-height:1!important;
-  font-size:1.12rem!important; margin:0!important; padding:0!important; text-align:center!important;
+  position:static!important; transform:none!important; display:flex!important; align-items:center!important; justify-content:center!important;
+  width:1.28rem!important; height:1.28rem!important; min-width:1.28rem!important; line-height:1!important;
+  font-size:1.28rem!important; margin:0!important; padding:0!important; text-align:center!important;
 }
-.st-key-top_language .stButton > button > div { display:flex!important; align-items:center!important; justify-content:center!important; }
-.st-key-top_language .stButton > button p { display:flex!important; align-items:center!important; justify-content:center!important; margin:0!important; width:100%!important; height:100%!important; text-align:center!important; line-height:1!important; }
+.st-key-top_language .stButton > button { border-radius:9px!important; }
+.st-key-top_language .stButton > button p {
+  display:flex!important; align-items:center!important; justify-content:center!important; margin:0!important; padding:0!important;
+  width:100%!important; height:100%!important; text-align:center!important; line-height:1!important; font-size:.78rem!important; font-weight:750!important; white-space:nowrap!important;
+}
 @media(max-width:700px){
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:3.35rem!important;width:3.35rem!important;min-width:3.35rem!important;max-width:3.35rem!important;}
-  .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.45rem!important;width:2.45rem!important;min-width:2.45rem!important;max-width:2.45rem!important;}
-  .st-key-utility_toolbar .stButton>button{height:2.45rem!important;min-height:2.45rem!important;}
+  .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:2.85rem!important;width:2.85rem!important;min-width:2.85rem!important;max-width:2.85rem!important;}
+  .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.25rem!important;width:2.25rem!important;min-width:2.25rem!important;max-width:2.25rem!important;}
+  .st-key-utility_toolbar .stButton>button{height:2.25rem!important;min-height:2.25rem!important;}
 }
 /* Manual composer stays visually attached to the conversation. The actual text entry
    is a Streamlit form so Enter and Send behave identically; the suggestion lives beside it. */
@@ -379,6 +370,63 @@ ACTION_ZH = {
     "clarify": "只问一个能够推进问题解决的聚焦问题，不让客户重复已提供的信息。",
 }
 
+CONCEPT_NAME_ZH = {
+    "authoritative_status": "权威系统状态",
+    "customer_visible_status": "客户可见状态",
+    "customer_belief_status": "客户认为的状态",
+    "root_cause": "根本原因",
+    "customer_domain": "客服领域",
+    "relationship_state": "客户关系状态",
+    "customer_emotion": "客户情绪",
+    "emotion_intensity": "情绪强度",
+    "retry_count": "重试次数",
+    "avoid_repeat_action": "避免重复操作",
+    "prior_effort": "客户已完成的排查",
+    "backend_event": "后台事件",
+    "visual_observation": "视觉观察",
+    "channel_visual_context": "渠道视觉信息",
+    "audio_transcript": "音频转写",
+    "video_summary": "视频摘要",
+    "video_visible_evidence": "视频可见证据",
+    "video_spoken_content": "视频语音内容",
+    "image_analysis_status": "图像分析状态",
+    "audio_analysis_status": "音频分析状态",
+    "video_analysis_status": "视频分析状态",
+}
+
+CONCEPT_VALUE_ZH = {
+    "resolved": "已解决", "unresolved": "未解决", "supported": "已支持",
+    "appears successful": "看起来已成功", "delivered": "已送达", "wifi visible": "Wi-Fi 可见",
+    "partial access": "部分访问", "cancellation requested": "已请求取消", "new itinerary visible": "新行程已显示",
+    "return completed": "退货已完成", "100% progress": "进度显示 100%", "connected": "已连接",
+    "workspace visible": "工作区可见", "adjusted badge": "已显示调整标记", "confirmed": "已确认",
+    "active": "有效", "upgrade visible": "升级信息可见", "cancelled": "已取消", "ticket visible": "票券可见",
+    "upgrade complete": "升级已完成", "completed": "已完成",
+    "merchant category restriction": "商户类别限制",
+    "carrier depot exception": "承运商站点异常",
+    "neighborhood fiber outage": "社区光纤中断",
+    "risk lock requires identity verification": "风险锁定，需要身份验证",
+    "cancellation confirmation was never committed": "取消确认未真正写入系统",
+    "ticket reissue failed after itinerary change": "行程变更后票务重签失败",
+    "refund workflow stalled after warehouse receipt": "仓库收货后退款流程停滞",
+    "proof-of-loss document missing": "缺少损失证明文件",
+    "firmware authentication loop": "固件认证循环故障",
+    "role entitlement propagation failed": "角色权限同步失败",
+    "corrected meter read awaiting ledger posting": "更正后的抄表读数尚未入账",
+    "provider schedule change not reflected in portal cache": "医生排班变更尚未同步到门户缓存",
+    "fraud restriction pending card replacement workflow": "欺诈限制仍在等待换卡流程完成",
+    "upgrade failed to sync to property system": "升级信息未同步到酒店系统",
+    "authorization hold awaiting automatic release": "预授权冻结仍在等待自动释放",
+    "ticket entitlement activation failed": "票券权限激活失败",
+    "plan change not propagated to network policy": "套餐变更尚未同步到网络策略",
+    "seller remediation task was never fulfilled": "卖家补救任务尚未完成",
+    "avoid repeating completed troubleshooting": "不要重复客户已经完成的排查",
+    "customer has already completed troubleshooting": "客户已经完成过排查步骤",
+    "live visual evidence available": "已有实时视觉证据",
+    "analysis unavailable": "分析不可用",
+}
+
+
 
 def _is_zh() -> bool:
     return st.session_state.get("ui_language", "English") == "中文"
@@ -406,6 +454,31 @@ def channel_hint(channel: str) -> str:
 
 def _language_prompt_name() -> str:
     return "Simplified Chinese" if _is_zh() else "English"
+
+
+def display_concept_name(name: str) -> str:
+    if not _is_zh():
+        return str(name).replace("_", " ").title()
+    if name in CONCEPT_NAME_ZH:
+        return CONCEPT_NAME_ZH[name]
+    if name.startswith("image_evidence_"):
+        suffix = name.rsplit("_", 1)[-1]
+        return f"图像证据 {suffix}"
+    return str(name).replace("_", " ")
+
+
+def display_concept_value(name: str, value) -> str:
+    raw = str(value)
+    if not _is_zh():
+        return raw
+    low = raw.strip().lower()
+    if name == "customer_domain":
+        return DOMAIN_ZH.get(low, raw)
+    if name == "customer_emotion":
+        return EMOTION_ZH.get(low, raw)
+    if name == "relationship_state":
+        return {"new":"新客户", "positive":"良好", "loyal":"忠诚", "neutral":"中性", "strained":"紧张", "at risk":"流失风险"}.get(low, raw)
+    return CONCEPT_VALUE_ZH.get(low, raw)
 
 
 def manual_mode_config(channel: str) -> dict:
@@ -485,23 +558,45 @@ def localize_generated_scenario(scenario):
     return updated
 
 
+SETTINGS_DEFAULTS = {
+    "speed": "Fast",
+    "reply": "Concise",
+    "scenario_ai": True,
+    "auto_scroll": True,
+    "researcher_view": False,
+}
+
+
 def _init_preferences() -> None:
-    defaults = {
-        "settings_speed": "Fast",
-        "settings_reply": "Concise",
-        "settings_scenario_ai": True,
-        "settings_auto_scroll": True,
-        "settings_researcher_view": False,
-        "ui_language": "English",
-        "generation_epoch": 0,
-    }
-    for key, value in defaults.items():
-        st.session_state.setdefault(key, value)
+    # Keep settings in a non-widget state object. Streamlit may clean widget keys when
+    # a dialog is not rendered, but this persistent object survives tab changes/reruns.
+    st.session_state.setdefault("app_settings", dict(SETTINGS_DEFAULTS))
+    for name, default in SETTINGS_DEFAULTS.items():
+        legacy_key = f"settings_{name}"
+        if legacy_key in st.session_state:
+            st.session_state["app_settings"][name] = st.session_state[legacy_key]
+        st.session_state["app_settings"].setdefault(name, default)
+    st.session_state.setdefault("ui_language", "English")
+    st.session_state.setdefault("generation_epoch", 0)
+
+
+def _setting(name: str):
+    return st.session_state.get("app_settings", SETTINGS_DEFAULTS).get(name, SETTINGS_DEFAULTS[name])
+
+
+def _persist_setting(widget_key: str, name: str) -> None:
+    st.session_state.setdefault("app_settings", dict(SETTINGS_DEFAULTS))
+    st.session_state["app_settings"][name] = st.session_state.get(widget_key, SETTINGS_DEFAULTS[name])
+
+
+def _seed_setting_widget(widget_key: str, name: str) -> None:
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = _setting(name)
 
 
 def _ai_runtime() -> dict:
-    speed = st.session_state.get("settings_speed", "Fast")
-    reply = st.session_state.get("settings_reply", "Concise")
+    speed = _setting("speed")
+    reply = _setting("reply")
     if speed == "Fast":
         # Bound TokenHub calls explicitly and disable hidden SDK retries.
         # DeepSeek streams can return much sooner; this is only the per-attempt cap.
@@ -627,14 +722,21 @@ def _copy_current_link() -> None:
 @st.dialog("Settings" if not _is_zh() else "设置", width="small")
 def _settings_dialog() -> None:
     st.markdown(L("**Conversation settings**", "**对话设置**"))
+    for widget_key, name in [
+        ("settings_speed", "speed"), ("settings_reply", "reply"),
+        ("settings_scenario_ai", "scenario_ai"), ("settings_auto_scroll", "auto_scroll"),
+        ("settings_researcher_view", "researcher_view"),
+    ]:
+        _seed_setting_widget(widget_key, name)
     st.selectbox(
         L("AI response profile", "AI 响应速度"), ["Fast", "Balanced"], key="settings_speed",
+        on_change=_persist_setting, args=("settings_speed", "speed"),
         help=L("Fast uses a 12-second DeepSeek attempt cap and 4 recent messages. Balanced uses a 20-second cap and 6 recent messages.", "Fast：单次 DeepSeek 最长 12 秒、保留最近 4 条消息；Balanced：最长 20 秒、保留最近 6 条消息。"),
     )
-    st.selectbox(L("Agent reply length", "客服回复长度"), ["Concise", "Standard"], key="settings_reply")
-    st.toggle(L("Use DeepSeek to vary scenario wording", "使用 DeepSeek 改写场景措辞"), key="settings_scenario_ai", help=L("Turn this off for near-instant curated scenario generation.", "关闭后会直接使用预设场景，生成速度更快。"))
-    st.toggle(L("Auto-scroll conversations", "对话自动滚动到底部"), key="settings_auto_scroll")
-    st.toggle(L("Enable Researcher View", "启用研究者视图"), key="settings_researcher_view", help=L("Shows hidden simulated ground truth and provider diagnostics. Off by default.", "显示隐藏的模拟真值和模型诊断信息。默认关闭。"))
+    st.selectbox(L("Agent reply length", "客服回复长度"), ["Concise", "Standard"], key="settings_reply", on_change=_persist_setting, args=("settings_reply", "reply"))
+    st.toggle(L("Use DeepSeek to vary scenario wording", "使用 DeepSeek 改写场景措辞"), key="settings_scenario_ai", on_change=_persist_setting, args=("settings_scenario_ai", "scenario_ai"), help=L("Turn this off for near-instant curated scenario generation.", "关闭后会直接使用预设场景，生成速度更快。"))
+    st.toggle(L("Auto-scroll conversations", "对话自动滚动到底部"), key="settings_auto_scroll", on_change=_persist_setting, args=("settings_auto_scroll", "auto_scroll"))
+    st.toggle(L("Enable Researcher View", "启用研究者视图"), key="settings_researcher_view", on_change=_persist_setting, args=("settings_researcher_view", "researcher_view"), help=L("Shows hidden simulated ground truth and provider diagnostics. Off by default.", "显示隐藏的模拟真值和模型诊断信息。默认关闭。"))
     cfg = _ai_runtime()
     st.caption(L(
         f"Text/image: {TOKENHUB_MODEL} · Audio: {TOKENHUB_AUDIO_MODEL} · Video: {TOKENHUB_VIDEO_MODEL}",
@@ -665,7 +767,7 @@ def _toggle_language() -> None:
 
 
 with st.container(key="utility_toolbar"):
-    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .078, .054, .054, .054, .054], gap="small", vertical_alignment="center")
+    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .064, .045, .045, .045, .045], gap="small", vertical_alignment="center")
     with lang_col:
         st.button(
             "中文" if not _is_zh() else "EN",
@@ -676,7 +778,7 @@ with st.container(key="utility_toolbar"):
         if st.button(" ", icon=":material/help:", help=L("Help", "帮助"), key="top_help", width="stretch"):
             _help_dialog()
     with u2:
-        if st.button(" ", icon=":material/content_copy:", help=L("Copy page link", "复制页面链接"), key="top_share", width="stretch"):
+        if st.button(" ", icon=":material/link:", help=L("Copy page link", "复制页面链接"), key="top_share", width="stretch"):
             _copy_current_link()
     with u3:
         if st.button(" ", icon=":material/refresh:", help=L("Reset current sessions", "重置当前会话"), key="top_reset", width="stretch"):
@@ -765,8 +867,8 @@ def concept_rows(state) -> pd.DataFrame:
     rows = []
     for c in ordered_active_concepts(state):
         rows.append({
-            L("Concept", "概念"): c.name.replace("_", " ").title(),
-            L("Value", "值"): c.value,
+            L("Concept", "概念"): display_concept_name(c.name),
+            L("Value", "值"): display_concept_value(c.name, c.value),
             L("Status", "状态"): STATUS_ZH.get(c.status, c.status) if _is_zh() else c.status,
             L("Sources", "来源"): ", ".join(SOURCE_ZH.get(src, src) if _is_zh() else src for src in c.sources),
             L("Priority", "优先级"): round(c.score, 2),
@@ -809,7 +911,7 @@ def render_workspace(state, *, show_coaching: bool = True) -> None:
         for c in display_concepts:
             sources = " · ".join((SOURCE_ZH.get(src, src) if _is_zh() else src.title()) for src in c.sources)
             st.markdown(
-                f'''<div class="j-card j-concept {html.escape(c.status)}"><div class="j-card-title">{html.escape(c.name.replace('_',' ').title())}</div><div class="j-card-value">{html.escape(str(c.value))}</div><div class="j-card-meta">{html.escape(sources)} · {L('priority', '优先级')} {c.score:.2f} · {html.escape(STATUS_ZH.get(c.status, c.status) if _is_zh() else c.status)}</div></div>''',
+                f'''<div class="j-card j-concept {html.escape(c.status)}"><div class="j-card-title">{html.escape(display_concept_name(c.name))}</div><div class="j-card-value">{html.escape(display_concept_value(c.name, c.value))}</div><div class="j-card-meta">{html.escape(sources)} · {L('priority', '优先级')} {c.score:.2f} · {html.escape(STATUS_ZH.get(c.status, c.status) if _is_zh() else c.status)}</div></div>''',
                 unsafe_allow_html=True,
             )
 
@@ -820,7 +922,7 @@ def render_workspace(state, *, show_coaching: bool = True) -> None:
             for c in status_concepts:
                 sources = " · ".join((SOURCE_ZH.get(src, src) if _is_zh() else src.title()) for src in c.sources)
                 st.markdown(
-                    f'''<div class="j-card j-concept {html.escape(c.status)}"><div class="j-card-title">{html.escape(c.name.replace('_',' ').title())}</div><div class="j-card-value">{html.escape(str(c.value))}</div><div class="j-card-meta">{html.escape(sources)} · {L('priority', '优先级')} {c.score:.2f}</div></div>''',
+                    f'''<div class="j-card j-concept {html.escape(c.status)}"><div class="j-card-title">{html.escape(display_concept_name(c.name))}</div><div class="j-card-value">{html.escape(display_concept_value(c.name, c.value))}</div><div class="j-card-meta">{html.escape(sources)} · {L('priority', '优先级')} {c.score:.2f}</div></div>''',
                     unsafe_allow_html=True,
                 )
 
@@ -878,7 +980,7 @@ def _conversation_html(transcript: list[dict], channel_label: str, *, typing: bo
 def render_conversation(transcript: list[dict], channel_label: str, *, typing: bool = False, slot=None) -> None:
     target = slot or st.empty()
     target.markdown(_conversation_html(transcript, channel_label, typing=typing), unsafe_allow_html=True)
-    if st.session_state.get("settings_auto_scroll", True) and transcript:
+    if _setting("auto_scroll") and transcript:
         _scroll_latest_conversation()
 
 
@@ -972,6 +1074,12 @@ def prepare_scenario_for_channel(scenario, channel_label: str):
 
 
 def suggested_customer_prompt(domain: str, state) -> str:
+    """Suggest the customer's next *move*, not just another question.
+
+    The mix deliberately includes confirmations, instructions, corrections, and short
+    questions. This lets Manual mode progress toward remediation instead of getting
+    trapped in an endless interview loop.
+    """
     if not state.transcript:
         return (CUSTOMER_STARTERS_ZH if _is_zh() else CUSTOMER_STARTERS).get(
             domain, L("I need help with an issue on my account. Can you check the current system status?", "我的账户有一个问题。你能帮我检查当前系统状态吗？")
@@ -979,50 +1087,56 @@ def suggested_customer_prompt(domain: str, state) -> str:
     if state.session_ended:
         return ""
 
-    last_agent = ""
-    for row in reversed(state.transcript):
-        if row.get("role") == "agent":
-            last_agent = str(row.get("text") or "")
-            break
+    last_agent = next((str(row.get("text") or "") for row in reversed(state.transcript) if row.get("role") == "agent"), "")
     low = last_agent.lower()
+    turn_count = sum(1 for row in state.transcript if row.get("role") == "agent")
 
-    if state.conflicts:
-        return L(
-            "What I'm seeing still doesn't match what you're telling me. Which system is authoritative, and what exactly is causing the mismatch?",
-            "我看到的信息还是和你说的不一致。到底哪个系统才是权威记录？造成不一致的具体原因是什么？",
-        )
     if state.session_phase == "resolved":
         return L(
-            "Thanks. Can you confirm there isn't anything else I need to do on my side before we wrap up?",
-            "谢谢。结束之前，你能确认我这边已经不需要再做其他事情了吗？",
+            "That works on my side now. I don't have any other concerns — thanks for getting it fixed.",
+            "我这边现在已经正常了，也没有其他问题。谢谢你帮我处理好。",
         )
+
+    action = str(getattr(state, "recommended_action_code", "") or "")
+    if action == "act_on_root_cause":
+        return L(
+            "That explanation makes sense. Please go ahead with the concrete fix you just described and let me know when the system updates.",
+            "这个解释说得通。请直接按你刚才说的方案处理，系统更新后告诉我结果。",
+        )
+    if action == "avoid_repetition":
+        return L(
+            "I've already completed those steps, so please skip the repeats and move to the next system-side check.",
+            "这些步骤我已经做过了，请不要再重复，让我们直接进入下一项系统侧检查。",
+        )
+    if state.conflicts:
+        conflict_moves = [
+            L("That still doesn't match what I see. Please verify the authoritative record and resolve the system-side mismatch before we move on.", "这还是和我看到的不一致。请核对权威记录，并先把系统侧的不一致处理掉再继续。"),
+            L("I understand there is a mismatch. Please keep the case open and check the specific blocker rather than asking me to retry anything.", "我明白现在存在信息不一致。请保持工单开启并检查具体阻塞点，不要再让我重复重试。"),
+            L("Please use the backend record and the evidence I've already provided to decide the next concrete action.", "请直接结合后台记录和我已经提供的证据，采取下一步具体处理动作。"),
+        ]
+        return conflict_moves[turn_count % len(conflict_moves)]
+
     if any(k in low for k in ["confirmation number", "reservation number", "order number", "booking reference", "ticket number"]):
-        return L(
-            "Sure — the reference is on hand. Before I share it, can you tell me exactly what you'll verify once you pull it up?",
-            "可以，我这边有编号。不过在我发给你之前，你能先告诉我你调出来之后会具体核实什么吗？",
-        )
-    if any(k in low for k in ["24", "48", "business day", "within", "refund", "timeframe", "eta"]):
-        return L(
-            "Thanks. What exact timeline should I expect, and what should I do if that deadline passes without an update?",
-            "好的。那我应该预期一个怎样的具体时间线？如果过了这个时间还没有更新，我应该怎么做？",
-        )
-    if any(k in low for k in ["verify", "checking", "investigat", "look into", "review"]):
-        return L(
-            "Can you tell me what you've already verified so far and what the next concrete step is?",
-            "你能告诉我目前已经核实了哪些信息，以及下一步具体会做什么吗？",
-        )
-    if any(k in low for k in ["blocker", "cause", "root cause", "preventing", "holding"]):
-        return L(
-            "Can you explain the blocker in plain language and what action will remove it?",
-            "你能用直白一点的话解释这个阻塞点是什么，以及要采取什么动作才能解除它吗？",
-        )
-    turn_count = sum(1 for row in state.transcript if row.get("role") == "agent")
-    variants = [
-        L("What is the next action you'll take on your side to move this forward?", "你这边下一步会采取什么动作来推进处理？"),
-        L("Can you be specific about what changed in the system versus what still hasn't changed yet?", "你能具体说说系统里已经发生了什么变化、还有哪些地方还没变吗？"),
-        L("Before we move on, what is the most important thing I should understand about the case right now?", "在继续之前，目前这个问题里我最应该先理解清楚的关键信息是什么？"),
+        return L("I have the reference ready. I'll provide it now so you can continue the verification.", "我已经准备好相关编号了，我现在提供给你，请继续核实。")
+    if any(k in low for k in ["24", "48", "business day", "within", "timeframe", "eta"]):
+        return L("Understood. I'll wait for that timeframe; if it passes without an update, I'll come back with this case reference.", "明白了。我会等到这个时间点；如果到时还没有更新，我会带着这个工单信息再回来。")
+    if any(k in low for k in ["verify", "checking", "investigat", "look into", "review", "核实", "检查", "调查"]):
+        moves = [
+            L("Please continue that check and tell me what changes once you verify the blocker.", "请继续核查，确认阻塞点后告诉我系统发生了什么变化。"),
+            L("Thanks — I'll wait while you verify it. Please use what I've already provided rather than restarting the troubleshooting.", "好的，我等你核实。请直接使用我已经提供的信息，不要重新开始排查。"),
+            L("What have you verified so far, and which single check comes next?", "目前已经核实了什么？接下来最关键的一项检查是什么？"),
+        ]
+        return moves[turn_count % len(moves)]
+    if any(k in low for k in ["blocker", "cause", "root cause", "preventing", "holding", "根因", "阻塞"]):
+        return L("Now that you've identified the blocker, please apply the fix instead of doing more general troubleshooting.", "既然已经找到阻塞原因，请直接采取修复动作，不要再做泛化排查。")
+
+    general_moves = [
+        L("Please keep moving this forward and use the next system-side action that can actually change the outcome.", "请继续推进，直接采取能够真正改变结果的下一项系统侧动作。"),
+        L("I've given you the relevant context. Please continue from here without making me repeat it.", "相关信息我都已经提供了，请从这里继续处理，不要让我重复说明。"),
+        L("What is the one thing you still need to verify before you can act?", "在你采取行动之前，还剩哪一件最关键的事情需要核实？"),
+        L("Okay, please proceed with the next concrete step and tell me the result.", "好的，请直接进行下一步具体操作，然后告诉我结果。"),
     ]
-    return variants[turn_count % len(variants)]
+    return general_moves[turn_count % len(general_moves)]
 
 
 def _queue_manual_suggestion(suggestion: str) -> None:
@@ -1092,6 +1206,7 @@ def process_scenario_turn(scenario, state, step_index: int, channel_label: str, 
     if reply is None or int(st.session_state.get("generation_epoch", 0)) != epoch:
         return False
     append_agent_reply(state, reply, provider, step_label=step.label)
+    update_customer_relationship(scenario.customer_profile, state, reply, provider)
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
     return True
 
@@ -1111,11 +1226,14 @@ def process_manual_turn(state, profile, domain: str, channel_label: str, prompt:
     render_conversation(state.transcript, channel_label, typing=True, slot=conversation_slot)
     if media:
         cfg = _ai_runtime()
-        media_concepts = analyze_media_for_jspace(
-            media, api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, audio_model=TOKENHUB_AUDIO_MODEL,
+        media_kwargs = dict(
+            api_key=TOKENHUB_API_KEY, model=TOKENHUB_MODEL, audio_model=TOKENHUB_AUDIO_MODEL,
             video_model=TOKENHUB_VIDEO_MODEL, base_url=TOKENHUB_BASE_URL, domain=domain,
             timeout_s=cfg["timeout_ms"] / 1000.0,
         )
+        if _accepts_kwarg(analyze_media_for_jspace, "language"):
+            media_kwargs["language"] = _language_prompt_name()
+        media_concepts = analyze_media_for_jspace(media, **media_kwargs)
         if int(st.session_state.get("generation_epoch", 0)) != epoch:
             return False
         if media_concepts:
@@ -1127,6 +1245,7 @@ def process_manual_turn(state, profile, domain: str, channel_label: str, prompt:
     if reply is None or int(st.session_state.get("generation_epoch", 0)) != epoch:
         return False
     append_agent_reply(state, reply, provider)
+    update_customer_relationship(profile, state, reply, provider)
     render_conversation(state.transcript, channel_label, slot=conversation_slot)
     return True
 
@@ -1169,7 +1288,7 @@ if scenario_tab.open:
             with st.spinner(L("Building a customer case…", "正在生成客户案例…")):
                 scenario = generate_scenario(ScenarioControls(domain=scenario_domain, seed=seed))
                 scenario_provider = L("Curated scenario · instant", "预设场景 · 即时")
-                if AI_CONNECTED and (st.session_state.get("settings_scenario_ai", True) or _is_zh()):
+                if AI_CONNECTED and (_setting("scenario_ai") or _is_zh()):
                     cfg = _ai_runtime()
                     rewrite_kwargs = dict(
                         api_key=TOKENHUB_API_KEY,
@@ -1203,7 +1322,7 @@ if scenario_tab.open:
             st.info(L("Generate a scenario first. The case brief will appear here, then you can start the live conversation.", "请先生成场景。这里会先显示案例摘要，然后你可以开始实时对话。"))
         else:
             st.markdown('<div id="scenario-live-anchor"></div>', unsafe_allow_html=True)
-            if st.session_state.pop("scenario_scroll_pending", False) and st.session_state.get("settings_auto_scroll", True):
+            if st.session_state.pop("scenario_scroll_pending", False) and _setting("auto_scroll"):
                 _scroll_to("scenario-live-anchor")
 
             st.markdown(
@@ -1255,7 +1374,7 @@ if scenario_tab.open:
             with workspace_col:
                 render_workspace(state, show_coaching=True)
 
-            if st.session_state.get("settings_researcher_view", False):
+            if _setting("researcher_view"):
                 with st.expander(L("Researcher view · scenario ground truth", "研究者视图 · 场景真值"), expanded=False):
                     st.write(L("**Domain:**", "**领域：**"), display_domain(scenario.domain))
                     st.write(L("**Problem summary:**", "**问题摘要：**"), scenario.problem_summary)
@@ -1414,7 +1533,7 @@ if manual_tab.open:
             with workspace_col:
                 render_workspace(manual_state, show_coaching=False)
 
-            if st.session_state.get("settings_researcher_view", False):
+            if _setting("researcher_view"):
                 with st.expander(L("Researcher view · simulated company context", "研究者视图 · 模拟公司上下文"), expanded=False):
                     st.write(L("**Domain:**", "**领域：**"), display_domain(active_manual_domain))
                     st.write(L("**Channel:**", "**渠道：**"), display_channel(active_manual_channel))

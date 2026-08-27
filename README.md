@@ -1,19 +1,18 @@
-# JSpace Live — v1.0
+# JSpace Live — v1.1
 
 ## Updates
 
-- Fixed the Manual **Use prompt** crash. Suggested text is now queued before Streamlit creates the chat widget, so clicking **Use prompt** safely fills the textbox on the next rerun and can be edited before Enter/Send.
-- Manual Multimodal AI keeps five distinct input modes: **Text Messages**, **Image Upload**, **Audio Upload**, **Video Upload**, and **Multimodal Mix**.
-- **Text Messages** accepts text only. **Image Upload** accepts images only. **Audio Upload** accepts audio only. **Video Upload** accepts video only. **Multimodal Mix** accepts text, images, audio, and video.
-- Suggested prompts appear only in **Text Messages** and **Multimodal Mix** and evolve using the latest agent reply, conflict state, session phase, and conversation progress.
-- Evidence controls are now visibly open by default and use mode-specific headings such as **Image evidence**, **Audio evidence**, **Video evidence**, and **Multimodal evidence**.
-- The global **English / 中文** toggle keeps generated customer turns, DeepSeek agent replies, local fallback replies, and suggested prompts in the selected language. Chinese mode has a deterministic Simplified-Chinese scenario fallback if AI scenario rewriting fails.
-- The main JSpace display prioritizes task-specific concepts. Routine resolution/status concepts are kept in a separate lower **Resolution/status context** lane so they do not dominate the primary workspace.
-- Scenario conversation length/progress counters are hidden.
-- **Researcher View** is hidden by default and only appears after it is explicitly enabled in **Settings**.
-- The top-right toolbar uses compact controls with stricter horizontal/vertical centering.
-- **Share** is now a clipboard-only action that copies the current page link. There is no email/share workflow.
-- Text/images use `deepseek/deepseek-v4-flash-vision-exp`; standalone audio uses `hy-asr-3.0-preview`; video uses `youtu-vita`.
+- Reworked the top-right controls into a **borderless website-style toolbar**. Help, link, reset, and settings icons use transparent hit areas and explicit horizontal/vertical centering; Share now uses a link icon.
+- Suggested customer prompts are now **customer moves, not question loops**. Depending on the latest agent reply and JSpace state, suggestions can acknowledge progress, authorize a fix, refuse repeated troubleshooting, ask one targeted question, or close naturally after resolution.
+- Manual simulated cases can now **progress to resolution** after the customer authorizes a concrete remediation, preventing unresolved conflicts from remaining stuck forever.
+- Chinese mode now localizes **JSpace concept names and common concept values** (status, domain, emotion, root cause, relationship state, etc.). Image/video evidence requests also ask the multimodal model to return evidence in Simplified Chinese while Chinese mode is active.
+- **Patience starts at 100** for every new case. It stays unchanged when support is progressing and decays when the interaction stalls, repeats work, falls back, or leaves conflict unresolved for too long.
+- **Trust in company** now changes gradually with concrete progress, successful resolution, prolonged conflict, repeated troubleshooting, and fallback responses. Satisfaction remains on its existing scoring logic.
+- DeepSeek support responses use a modest temperature for more natural variation while keeping thinking disabled and bounded retries.
+- **Settings now persist across tab switches and session resets.** Preferences are stored separately from temporary Streamlit dialog widget keys, so Manual ↔ Scenario navigation no longer resets them.
+- Existing v1.0 behavior remains: mode-specific Manual inputs, Hy-ASR audio, YT-VITA video, DeepSeek text/images, bilingual scenario/customer/agent prompts, hidden scenario length, Settings-gated Researcher View, and clipboard-only sharing.
+- The global **English / 中文** language switch remains available across Scenario Lab and Manual mode.
+- Active model IDs: `deepseek/deepseek-v4-flash-vision-exp` for text/images, `hy-asr-3.0-preview` for standalone audio transcription, and `youtu-vita` for video understanding.
 
 ## Speed profiles
 

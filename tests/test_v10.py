@@ -7,7 +7,7 @@ def _source():
 
 def test_v10_version_and_prompt_prefill_is_streamlit_safe():
     source = _source()
-    assert 'APP_VERSION = "1.0.0-stable-manual-ux"' in source
+    assert 'APP_VERSION = "1.1.0-behavior-polish"' in source
     assert 'def _queue_manual_suggestion' in source
     assert 'st.session_state["manual_chat_prefill"] = suggestion' in source
     assert 'queued_prefill = st.session_state.pop("manual_chat_prefill", None)' in source
@@ -31,16 +31,16 @@ def test_v10_scenario_length_hidden_and_researcher_view_settings_gated():
     source = _source()
     assert 'Scenario progress ·' not in source
     assert '**Planned customer turns:**' not in source
-    assert '"settings_researcher_view": False' in source
+    assert '"researcher_view": False' in source
     assert 'Enable Researcher View' in source
-    assert 'if st.session_state.get("settings_researcher_view", False):' in source
+    assert 'if _setting("researcher_view"):' in source
 
 
 def test_v10_share_is_clipboard_only():
     source = _source()
     assert 'def _copy_current_link()' in source
     assert 'navigator.clipboard.writeText' in source
-    assert ':material/content_copy:' in source
+    assert ':material/link:' in source
     assert 'mailto:' not in source
     assert 'Recipient email' not in source
 
@@ -48,5 +48,6 @@ def test_v10_share_is_clipboard_only():
 def test_v10_toolbar_has_explicit_full_button_centering():
     source = _source()
     assert 'display:flex!important; align-items:center!important; justify-content:center!important;' in source
-    assert 'position:absolute!important; inset:0!important; transform:none!important;' in source
-    assert 'width:100%!important; height:100%!important; line-height:1!important;' in source
+    assert 'background:transparent!important; box-shadow:none!important;' in source
+    assert 'display:flex!important; align-items:center!important; justify-content:center!important;' in source
+    assert 'width:100%!important; height:100%!important;' in source

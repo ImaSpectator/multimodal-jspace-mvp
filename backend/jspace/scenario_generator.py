@@ -287,8 +287,11 @@ def _profile(rng: random.Random) -> dict:
         weights=[8, 22, 18, 22, 20, 10],
         k=1,
     )[0]
-    patience = rng.randint(20, 95)
-    trust = rng.randint(25, 95)
+    # Patience starts full for every new support interaction and only decays when
+    # the conversation stalls. Trust starts from the relationship context and can
+    # fluctuate slightly as the interaction progresses.
+    patience = 100
+    trust = rng.randint(45, 88)
     return {
         "name": rng.choice(["Alex", "Maya", "Jordan", "Sam", "Taylor", "Chris", "Morgan", "Riley", "Jamie", "Avery"]),
         "tenure": "new customer" if tenure_years < 0.5 else ((("1 year" if int(tenure_years) == 1 else f"{int(tenure_years)} years") if tenure_years >= 1 else "6 months")),

@@ -73,6 +73,102 @@ def _update_satisfaction(state: SessionState, reply: str) -> None:
     state.customer_satisfaction = round(max(0.0, min(100.0, state.customer_satisfaction + delta)), 1)
 
 
+
+
+def update_customer_relationship(profile: dict, state: SessionState, reply: str, provider: str = "") -> None:
+    """Update patience/trust from conversation quality without touching satisfaction.
+
+    Patience starts at 100 and never increases: useful progress leaves it alone, while
+    repetition, fallbacks, and prolonged unresolved conflict consume it. Trust moves
+    more gently in either direction. A tiny deterministic jitter keeps sessions from
+    feeling mechanically identical while keeping tests reproducible.
+    """
+    if not profile:
+        return
+    low = (reply or "").lower()
+    provider_low = (provider or "").lower()
+    agent_turns = sum(1 for row in state.transcript if row.get("role") == "agent")
+
+    concrete_progress = any(token in low for token in [
+        "verified", "confirmed", "found", "identified", "root cause", "fixed", "resolved",
+        "updated", "removed", "unlocked", "reissued", "refunded", "activated", "next step",
+        "i'll apply", "i will apply", "i've corrected", "已经核实", "已经确认", "查到", "根因",
+        "已解决", "已修复", "已更新", "下一步", "我会处理", "已经处理",
+    ])
+    asks_repeat = any(token in low for token in [
+        "try again", "restart again", "reset again", "repeat the", "do that again",
+        "再试一次", "再重启", "再重置", "重复刚才",
+    ])
+    fallback = "fallback" in provider_low or "simulation" in provider_low
+    prolonged_conflict = bool(state.conflicts) and agent_turns >= 3 and state.session_phase not in {"resolved", "closing", "ended"}
+
+    patience_loss = 0.0
+    if fallback:
+        patience_loss += 6.0
+    if asks_repeat:
+        patience_loss += 7.0
+    if prolonged_conflict and not concrete_progress:
+        patience_loss += 3.0 + min(3.0, max(0, agent_turns - 3) * 0.7)
+    if not concrete_progress and agent_turns >= 4 and state.session_phase == "active":
+        patience_loss += 1.5
+    profile["patience"] = int(round(max(0.0, min(100.0, float(profile.get("patience", 100)) - patience_loss))))
+
+    trust_delta = 0.0
+    if state.session_phase in {"resolved", "closing"} or any(x in low for x in ["confirmed resolved", "issue is resolved", "已经解决", "确认已经解决"]):
+        trust_delta += 4.0
+    elif concrete_progress:
+        trust_delta += 1.8
+    if fallback:
+        trust_delta -= 3.5
+    if asks_repeat:
+        trust_delta -= 2.5
+    if prolonged_conflict and not concrete_progress:
+        trust_delta -= 1.5
+
+    # Small deterministic variation (-0.6, 0, +0.6) based on this exact response.
+    jitter = ((sum(ord(ch) for ch in (reply or "")) + agent_turns) % 3 - 1) * 0.6
+    if abs(trust_delta) > 0.01:
+        trust_delta += jitter
+    profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
+
+
+def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
+    """Let manual practice progress after the customer authorizes a concrete fix.
+
+    Manual mode has simulated backend state, so without an explicit progression event an
+    unresolved authoritative status could remain stuck forever. This keeps the research
+    case controlled while allowing a natural multi-turn path to resolution.
+    """
+    low = (text or "").lower()
+    customer_turns = sum(1 for row in state.transcript if row.get("role") == "customer")
+    action_language = any(token in low for token in [
+        "go ahead", "please do", "please apply", "please proceed", "proceed", "make that change", "fix it", "please resolve",
+        "you can do that", "that works", "请继续", "请处理", "请帮我处理", "可以处理",
+        "就按这个做", "请修复", "请把", "那就这样处理",
+    ])
+    if customer_turns < 2 or not action_language:
+        return
+    authoritative = next((c for c in state.concepts if c.name == "authoritative_status"), None)
+    if not authoritative or str(authoritative.value).lower() == "resolved":
+        return
+    event = BackendEvent(
+        event_type="manual_resolution",
+        value="resolved",
+        metadata={
+            "concept_name": "authoritative_status",
+            "concept_value": "resolved",
+            "evidence": "simulated support remediation completed after the customer authorized the concrete fix",
+            "relevance": 1.0,
+            "confidence": 0.995,
+            "conflict_importance": 0.0,
+        },
+    )
+    state.backend_history.append(event.model_dump())
+    merge_concepts(state.concepts, extract_from_backend(event))
+    state.session_phase = "resolved"
+    refresh_state(state)
+
+
 def apply_scenario_customer_step(scenario: GeneratedScenario, state: SessionState, step_index: int) -> SessionState:
     """Apply only the customer/evidence half of a scenario turn.
 
@@ -206,6 +302,9 @@ def apply_manual_customer_message(
     merge_concepts(state.concepts, extract_from_turn(turn))
     if media_concepts:
         merge_concepts(state.concepts, media_concepts)
+    _maybe_advance_manual_resolution(state, text)
+    if state.session_phase == "resolved" and any(token in text.lower() for token in ["no other", "nothing else", "that's all", "thats all", "没有其他", "没别的", "就这些"]):
+        state.session_phase = "closing"
     return refresh_state(state)
 
 

@@ -317,6 +317,9 @@ def _request_kwargs(*, model: str, messages: list[dict], max_tokens: int, stream
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": stream,
+        # A modest temperature keeps customer-service replies natural and varied
+        # without making them unstable or overly creative.
+        "temperature": 0.55,
         "extra_body": {"thinking": {"type": "disabled"}},
     }
 
@@ -569,6 +572,7 @@ def analyze_video_with_youtuvita(
     base_url: str = DEFAULT_BASE_URL,
     domain: str,
     timeout_s: float = 30.0,
+    language: str = "English",
 ) -> tuple[list[Concept], str]:
     """Analyze one uploaded video with YT-VITA.
 
@@ -592,9 +596,11 @@ def analyze_video_with_youtuvita(
     else:
         b64 = base64.b64encode(data).decode("ascii")
         video_url = f"data:{mime};base64,{b64}"
+    output_language = "Simplified Chinese (简体中文)" if _language_is_chinese(language) else "English"
     prompt = (
         "Analyze this customer-service video, including both the visible scene and the spoken/audio content. "
         f"Domain: {domain}. Return ONLY a compact JSON object with keys summary, visible_evidence, spoken_content. "
+        f"Write all three values in {output_language}. "
         "summary must be one service-relevant sentence. visible_evidence and spoken_content may be empty strings. "
         "Do not infer identity, protected traits, health status, or facts not supported by the video."
     )
@@ -670,6 +676,7 @@ def analyze_media_for_jspace(
     base_url: str = DEFAULT_BASE_URL,
     domain: str,
     timeout_s: float = 12.0,
+    language: str = "English",
 ) -> list[Concept]:
     """Route media by modality: DeepSeek=image, Hy-ASR=audio, YT-VITA=video."""
     if not media:
@@ -680,9 +687,10 @@ def analyze_media_for_jspace(
     videos = [m for m in media if str(m.get("mime_type") or "").lower().startswith("video/") and (m.get("data") or m.get("url"))]
 
     if images and api_key:
+        output_language = "Simplified Chinese (简体中文)" if _language_is_chinese(language) else "English"
         prompt = (
             "Extract customer-service evidence from the attached image(s). "
-            f"Domain: {domain}. Return ONLY JSON as an object with an 'items' array. Each item must contain "
+            f"Domain: {domain}. Write every summary in {output_language}. Return ONLY JSON as an object with an 'items' array. Each item must contain "
             "summary (one observable service-relevant sentence) and confidence (0 to 1). Do not infer identity, "
             "health status, protected traits, or anything not directly visible."
         )
@@ -743,7 +751,7 @@ def analyze_media_for_jspace(
     for item in videos:
         video_concepts, provider = analyze_video_with_youtuvita(
             item, api_key=api_key, model=video_model, base_url=base_url, domain=domain,
-            timeout_s=max(timeout_s, 30.0),
+            timeout_s=max(timeout_s, 30.0), language=language,
         )
         if video_concepts:
             concepts.extend(video_concepts)
@@ -792,6 +800,7 @@ Return ONLY JSON with keys title, problem_summary, turns.
             model=model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=620,
+            temperature=0.65,
             response_format={"type": "json_object"},
             extra_body={"thinking": {"type": "disabled"}},
         )
