@@ -309,7 +309,8 @@ def test_v082_toolbar_uses_compact_centered_material_buttons_and_dialogs():
     assert 'with st.popover("❔"' not in source
     assert 'with st.popover("↗"' not in source
     assert 'with st.popover("⚙"' not in source
-    assert 'transform:translate(-50%,-50%)!important' in source
+    assert 'display:flex!important; align-items:center!important; justify-content:center!important' in source
+    assert '.st-key-top_help .stButton > button p' in source
     assert 'key="top_language"' in source
 
 
@@ -317,7 +318,8 @@ def test_v082_manual_composer_scroll_and_bilingual_controls():
     source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
     assert 'with st.form("manual_chat_form"' in source
     assert 'st.form_submit_button' in source
-    assert 'on_click=_use_manual_suggestion' in source
+    assert 'key="use_manual_suggestion"' in source
+    assert 'st.session_state["manual_chat_input"] = suggestion' in source
     assert 'Fill the chat box immediately; then press Enter or Send.' in source
     assert 'height:min(58vh,590px)' in source
     assert 'overflow-y:scroll' in source
@@ -325,6 +327,8 @@ def test_v082_manual_composer_scroll_and_bilingual_controls():
     assert 'ui_language' in source
     assert 'Simplified Chinese' in source
     assert 'Scenario progress' in source
+    assert 'MANUAL_MODE_CONFIG' in source
+    assert '"Image Upload"' in source and '"Audio Upload"' in source and '"Video Upload"' in source
 
 
 def test_v082_chinese_prompt_and_fallback_are_language_aware():
@@ -337,7 +341,7 @@ def test_v082_chinese_prompt_and_fallback_are_language_aware():
 
 def test_v082_readme_profiles_are_current_and_no_secret_setup_section():
     text = (Path(__file__).parents[1] / "README.md").read_text()
-    assert "# JSpace Live — v0.8.2" in text
+    assert "# JSpace Live — v0.9" in text
     assert "**Fast** | 12 seconds | Up to 2 | 4 recent messages | 12 seconds" in text
     assert "**Balanced** | 20 seconds | Up to 2 | 6 recent messages | 20 seconds" in text
     assert "**Concise** — up to 120 output tokens" in text
@@ -377,3 +381,30 @@ def test_every_domain_completes_with_capacity_and_natural_close(domain, k):
     assert all(len(s.active_concepts) <= k for s in snapshots)
     assert scenario.steps[-1].customer_turn.text
     assert any(r.get("role") == "agent" for r in state.transcript)
+
+
+def test_v09_manual_modes_are_strict_and_suggestions_only_text_multimodal():
+    source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
+    assert '"Image Upload": {"allow_text": False' in source
+    assert '"Audio Upload": {"allow_text": False' in source
+    assert '"Video Upload": {"allow_text": False' in source
+    assert '"Text Messages": {"allow_text": True, "show_suggestion": True' in source
+    assert '"Multimodal Mix": {"allow_text": True, "show_suggestion": True' in source
+    assert 'Analyze & send evidence' in source
+
+
+def test_v09_chinese_scenario_fallback_and_dynamic_prompts():
+    source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
+    assert 'Guarantee Chinese customer-facing scenario text' in source
+    assert '客户当前遇到一个需要客服核实' in source or '客户看到的信息与公司系统记录存在差异' in source
+    assert 'last_agent = ""' in source
+    assert 'turn_count = sum(1 for row in state.transcript if row.get("role") == "agent")' in source
+    assert '你能告诉我目前已经核实了哪些信息' in source
+
+
+def test_v09_status_concepts_use_separate_lane():
+    source = (Path(__file__).parents[1] / "frontend" / "app.py").read_text()
+    assert 'STATUS_CONCEPT_NAMES' in source
+    assert 'Primary task concepts' in source
+    assert 'Resolution/status context' in source
+    assert 'primary_workspace_concepts' in source

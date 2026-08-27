@@ -40,7 +40,7 @@ from backend.jspace.simulator import (  # noqa: E402
     new_scenario_state,
 )
 
-APP_VERSION = "0.8.2.2-tencent-multimodal"
+APP_VERSION = "0.9.0-manual-ux-language"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -66,17 +66,32 @@ DOMAIN_DESCRIPTIONS = {
 CHANNELS = {
     "Text Messages": {
         "icon": "💬", "slug": "text messages",
-        "hint": "Text-first support. Customer wording is the primary signal; screenshots may add visual evidence.",
+        "hint": "Text-first support. Customer wording is the primary signal.",
         "affect_source": "text",
     },
+    "Image Upload": {
+        "icon": "🖼️", "slug": "image evidence",
+        "hint": "Image-led support. Upload screenshots or photos; the chat can reference only visual evidence for this turn.",
+        "affect_source": "image",
+    },
+    "Audio Upload": {
+        "icon": "🎧", "slug": "audio evidence",
+        "hint": "Audio-led support. Uploaded audio is transcribed by Hy-ASR; emotion is inferred from the transcript, not raw vocal tone.",
+        "affect_source": "audio",
+    },
+    "Video Upload": {
+        "icon": "◉", "slug": "video evidence",
+        "hint": "Video-led support. YT-VITA analyzes uploaded video frames and its audio track for this turn.",
+        "affect_source": "video",
+    },
     "Voice Call": {
-        "icon": "🎧", "slug": "voice call",
-        "hint": "Spoken support. Uploaded audio is transcribed by Hy-ASR; emotion is inferred from wording, not raw vocal tone.",
+        "icon": "📞", "slug": "voice call",
+        "hint": "Live-call style support. Customer wording is shown like a call transcript, with audio-style affect cues.",
         "affect_source": "audio",
     },
     "Video + Voice": {
-        "icon": "◉", "slug": "video + voice call",
-        "hint": "YT-VITA analyzes uploaded video frames and its audio track; JSpace preserves that evidence separately from backend records.",
+        "icon": "📹", "slug": "video + voice call",
+        "hint": "Live video-call support. Video evidence and spoken context are interpreted together.",
         "affect_source": "video",
     },
     "Multimodal Mix": {
@@ -84,6 +99,14 @@ CHANNELS = {
         "hint": "DeepSeek image/text + Hy-ASR audio transcription + YT-VITA video + backend evidence in one shared workspace.",
         "affect_source": "audio",
     },
+}
+SCENARIO_CHANNELS = ["Text Messages", "Voice Call", "Video + Voice", "Multimodal Mix"]
+MANUAL_MODE_CONFIG = {
+    "Text Messages": {"allow_text": True, "show_suggestion": True, "file_types": [], "allow_video_url": False, "placeholder": ("Type the customer's text message…", "输入客户的文字消息…")},
+    "Image Upload": {"allow_text": False, "show_suggestion": False, "file_types": ["png", "jpg", "jpeg", "webp"], "allow_video_url": False, "placeholder": ("Image-only mode", "仅图片模式")},
+    "Audio Upload": {"allow_text": False, "show_suggestion": False, "file_types": ["mp3", "wav", "m4a", "ogg"], "allow_video_url": False, "placeholder": ("Audio-only mode", "仅音频模式")},
+    "Video Upload": {"allow_text": False, "show_suggestion": False, "file_types": ["mp4", "mov", "avi", "webm"], "allow_video_url": True, "placeholder": ("Video-only mode", "仅视频模式")},
+    "Multimodal Mix": {"allow_text": True, "show_suggestion": True, "file_types": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "avi", "webm"], "allow_video_url": True, "placeholder": ("Type the customer's message, then add any supporting media…", "先输入客户消息，再添加支持性媒体…")},
 }
 
 CUSTOMER_STARTERS = {
@@ -235,10 +258,21 @@ hr { border-color:rgba(140,175,215,.12)!important; }
   margin:0!important; font-size:.78rem!important; font-weight:800!important; letter-spacing:.01em!important;
   white-space:nowrap!important; line-height:1!important;
 }
-.st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
-  position:absolute!important; left:50%!important; top:50%!important; transform:translate(-50%,-50%)!important;
-  font-size:1.16rem!important; width:1.16rem!important; height:1.16rem!important; line-height:1.16rem!important;
+.st-key-utility_toolbar .stButton > button > div {
+  position:absolute!important; inset:0!important; width:100%!important; height:100%!important;
+  display:flex!important; align-items:center!important; justify-content:center!important; gap:0!important; margin:0!important; padding:0!important;
 }
+.st-key-top_help .stButton > button p,
+.st-key-top_share .stButton > button p,
+.st-key-top_reset .stButton > button p,
+.st-key-top_settings .stButton > button p { display:none!important; }
+.st-key-utility_toolbar .stButton > button [data-testid="stIconMaterial"] {
+  position:static!important; transform:none!important; display:block!important;
+  font-size:1.16rem!important; width:1.16rem!important; height:1.16rem!important; line-height:1.16rem!important;
+  margin:0!important; padding:0!important; text-align:center!important;
+}
+.st-key-top_language .stButton > button > div { display:flex!important; align-items:center!important; justify-content:center!important; }
+.st-key-top_language .stButton > button p { display:block!important; margin:0!important; width:auto!important; text-align:center!important; }
 @media(max-width:700px){
   .st-key-utility_toolbar [data-testid="column"]:nth-child(2){flex-basis:3.35rem!important;width:3.35rem!important;min-width:3.35rem!important;max-width:3.35rem!important;}
   .st-key-utility_toolbar [data-testid="column"]:nth-child(n+3){flex-basis:2.45rem!important;width:2.45rem!important;min-width:2.45rem!important;max-width:2.45rem!important;}
@@ -316,12 +350,15 @@ DOMAIN_DESCRIPTIONS_ZH = {
     "travel": "航班变更、出票、重签、订单状态与行程支持。", "utilities": "电表/水表、账单、服务记录与用量不一致。",
 }
 CHANNEL_ZH = {
-    "Text Messages": "文字消息", "Voice Call": "语音通话", "Video + Voice": "视频 + 语音", "Multimodal Mix": "多模态混合",
+    "Text Messages": "文字消息", "Image Upload": "图片上传", "Audio Upload": "音频上传", "Video Upload": "视频上传", "Voice Call": "语音通话", "Video + Voice": "视频 + 语音", "Multimodal Mix": "多模态混合",
 }
 CHANNEL_HINT_ZH = {
-    "Text Messages": "以文字为主的客服场景；客户措辞是主要信号，截图可提供额外视觉证据。",
-    "Voice Call": "语音客服；上传音频由 Hy-ASR 转写。情绪仅根据文字/转写内容推断，不把 ASR 当作声学情绪识别。",
-    "Video + Voice": "YT-VITA 同时分析视频画面与音轨；JSpace 会把视频证据与后台记录分开保留。",
+    "Text Messages": "以文字为主的客服场景；客户措辞是主要信号。",
+    "Image Upload": "以图片为主的客服场景；本轮主要上传截图或图片证据。",
+    "Audio Upload": "以音频为主的客服场景；上传音频由 Hy-ASR 转写，情绪根据转写文本推断。",
+    "Video Upload": "以视频为主的客服场景；上传视频由 YT-VITA 分析画面与音轨。",
+    "Voice Call": "实时电话风格客服；以通话转写形式展示客户内容。",
+    "Video + Voice": "实时视频通话风格客服；视频与语音上下文会一起解释。",
     "Multimodal Mix": "DeepSeek 文本/图像 + Hy-ASR 音频转写 + YT-VITA 视频 + 后台证据，共享到同一个 JSpace。",
 }
 EMOTION_ZH = {
@@ -369,6 +406,83 @@ def channel_hint(channel: str) -> str:
 
 def _language_prompt_name() -> str:
     return "Simplified Chinese" if _is_zh() else "English"
+
+
+def manual_mode_config(channel: str) -> dict:
+    return MANUAL_MODE_CONFIG.get(channel, MANUAL_MODE_CONFIG["Text Messages"])
+
+
+STATUS_CONCEPT_NAMES = {"authoritative_status", "customer_visible_status", "customer_belief_status"}
+
+
+def ordered_active_concepts(state) -> list:
+    concepts = list(getattr(state, "active_concepts", []) or [])
+    return sorted(concepts, key=lambda c: ((c.name in STATUS_CONCEPT_NAMES), -getattr(c, "score", 0.0), c.name))
+
+
+def primary_workspace_concepts(state) -> list:
+    """Show task concepts first without letting routine status cards dominate the UI.
+
+    Status concepts remain available in the reserved status lane below and in provenance.
+    If status concepts consumed active Top-K slots, fill the visual task lane with the
+    highest-ranked non-status candidates so researchers can inspect a richer concept set.
+    """
+    capacity = int(getattr(getattr(state, "config", None), "capacity_k", 4) or 4)
+    active = [c for c in getattr(state, "active_concepts", []) if c.name not in STATUS_CONCEPT_NAMES]
+    seen = {c.name for c in active}
+    extras = sorted(
+        [c for c in getattr(state, "concepts", []) if c.name not in STATUS_CONCEPT_NAMES and c.name not in seen],
+        key=lambda c: getattr(c, "score", 0.0), reverse=True,
+    )
+    return (active + extras)[:capacity]
+
+
+def status_workspace_concepts(state) -> list:
+    by_name = {}
+    for c in list(getattr(state, "concepts", []) or []) + list(getattr(state, "active_concepts", []) or []):
+        if c.name in STATUS_CONCEPT_NAMES:
+            by_name[c.name] = c
+    return sorted(by_name.values(), key=lambda c: c.name)
+
+
+def localize_generated_scenario(scenario):
+    """Guarantee Chinese customer-facing scenario text when the global UI is Chinese.
+
+    DeepSeek normally rewrites the scenario first. If that provider rewrite fails, this
+    deterministic fallback still keeps every customer turn in Chinese rather than
+    leaking the English curated template into a Chinese session.
+    """
+    if not _is_zh():
+        return scenario
+    updated = scenario.model_copy(deep=True)
+    starter = CUSTOMER_STARTERS_ZH.get(
+        updated.domain,
+        "我遇到了一个客服问题。你能先帮我确认一下当前系统状态吗？",
+    )
+    fallback_by_label = {
+        "Opening issue": starter,
+        "Customer explains impact": "这个问题已经影响到我现在的使用了。你能告诉我为什么还没有恢复正常吗？",
+        "Customer adds prior context": "我已经按照之前的建议尝试过了，但问题还是存在。你能不要让我重复同样的步骤，直接继续往下查吗？",
+        "Customer sees apparently conflicting evidence": "我这边看到的状态和你们系统说的不一样。现在到底哪个状态才是准确的？",
+        "Diagnostic result becomes available": "你目前查到了什么？我最想知道的是具体哪个环节还在阻塞。",
+        "Additional troubleshooting context 1": "你能再看看历史记录里有没有其他信息，可以解释为什么会发生这个问题吗？",
+        "Additional troubleshooting context 2": "如果修复真的生效了，我这边应该看到什么变化？",
+        "Additional troubleshooting context 3": "为了把这个问题彻底处理完，你还需要我提供什么信息吗？",
+        "Customer asks for resolution details": "在结束之前，你能告诉我这次具体会怎么解决，以及之后我需要注意什么吗？",
+        "Resolution confirmed": "我这边现在看起来已经正常了。你能再确认一下系统里也已经完全解决了吗？",
+        "No other concerns": "没有其他问题了，谢谢你的帮助。",
+    }
+    if sum('\u4e00' <= ch <= '\u9fff' for ch in str(updated.title)) < 3:
+        updated.title = "中文客服冲突解决场景"
+    if sum('\u4e00' <= ch <= '\u9fff' for ch in str(updated.problem_summary or "")) < 6:
+        updated.problem_summary = "客户看到的信息与公司系统记录存在差异，需要客服逐步核实、解释冲突并确认最终解决。"
+    for i, step in enumerate(updated.steps):
+        if not any('\u4e00' <= ch <= '\u9fff' for ch in str(step.customer_turn.text)):
+            step.customer_turn.text = fallback_by_label.get(
+                step.label,
+                "你能根据刚才查到的新信息告诉我下一步具体应该怎么推进吗？",
+            )
+    return updated
 
 
 def _init_preferences() -> None:
@@ -540,7 +654,7 @@ def _toggle_language() -> None:
 
 
 with st.container(key="utility_toolbar"):
-    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .10, .055, .055, .055, .055], gap="small", vertical_alignment="center")
+    spacer, lang_col, u1, u2, u3, u4 = st.columns([1, .085, .058, .058, .058, .058], gap="small", vertical_alignment="center")
     with lang_col:
         st.button(
             "中文" if not _is_zh() else "EN",
@@ -638,7 +752,7 @@ def _emotion_html(state) -> str:
 
 def concept_rows(state) -> pd.DataFrame:
     rows = []
-    for c in state.active_concepts:
+    for c in ordered_active_concepts(state):
         rows.append({
             L("Concept", "概念"): c.name.replace("_", " ").title(),
             L("Value", "值"): c.value,
@@ -665,7 +779,7 @@ def render_workspace(state, *, show_coaching: bool = True) -> None:
         st.markdown(_emotion_html(state), unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns(3)
-    c1.caption(f"{L('Active concepts', '活跃概念')} · {len(state.active_concepts)} / {state.config.capacity_k}")
+    c1.caption(f"{L('Active concepts', '活跃概念')} · {len(ordered_active_concepts(state))} / {state.config.capacity_k}")
     c2.caption(f"{L('Signal conflicts', '信号冲突')} · {len(state.conflicts)}")
     c3.caption(f"{L('Session phase', '会话阶段')} · {(PHASE_ZH.get(state.session_phase, state.session_phase) if _is_zh() else state.session_phase.title())}")
 
@@ -676,16 +790,28 @@ def render_workspace(state, *, show_coaching: bool = True) -> None:
                 unsafe_allow_html=True,
             )
 
-    st.markdown(L("##### Active workspace concepts", "##### 当前工作空间概念"))
-    if not state.active_concepts:
+    st.markdown(L("##### Primary task concepts", "##### 主要任务概念"))
+    display_concepts = primary_workspace_concepts(state)
+    if not display_concepts:
         st.info(L("JSpace will populate as customer, media, and company evidence arrive.", "随着客户、媒体和公司系统证据进入，JSpace 会逐步填充。"))
     else:
-        for c in state.active_concepts:
+        for c in display_concepts:
             sources = " · ".join((SOURCE_ZH.get(src, src) if _is_zh() else src.title()) for src in c.sources)
             st.markdown(
                 f'''<div class="j-card j-concept {html.escape(c.status)}"><div class="j-card-title">{html.escape(c.name.replace('_',' ').title())}</div><div class="j-card-value">{html.escape(str(c.value))}</div><div class="j-card-meta">{html.escape(sources)} · {L('priority', '优先级')} {c.score:.2f} · {html.escape(STATUS_ZH.get(c.status, c.status) if _is_zh() else c.status)}</div></div>''',
                 unsafe_allow_html=True,
             )
+
+    status_concepts = status_workspace_concepts(state)
+    if status_concepts:
+        with st.expander(L("Resolution/status context", "解决状态上下文"), expanded=False):
+            st.caption(L("Status remains available for conflict reasoning but no longer dominates the primary concept display.", "状态信息仍会参与冲突推理，但不会再占据主要概念展示的顶部。"))
+            for c in status_concepts:
+                sources = " · ".join((SOURCE_ZH.get(src, src) if _is_zh() else src.title()) for src in c.sources)
+                st.markdown(
+                    f'''<div class="j-card j-concept {html.escape(c.status)}"><div class="j-card-title">{html.escape(c.name.replace('_',' ').title())}</div><div class="j-card-value">{html.escape(str(c.value))}</div><div class="j-card-meta">{html.escape(sources)} · {L('priority', '优先级')} {c.score:.2f}</div></div>''',
+                    unsafe_allow_html=True,
+                )
 
     with st.expander(L("Evidence & provenance", "证据与来源"), expanded=False):
         df = concept_rows(state)
@@ -841,16 +967,51 @@ def suggested_customer_prompt(domain: str, state) -> str:
         )
     if state.session_ended:
         return ""
+
+    last_agent = ""
+    for row in reversed(state.transcript):
+        if row.get("role") == "agent":
+            last_agent = str(row.get("text") or "")
+            break
+    low = last_agent.lower()
+
     if state.conflicts:
         return L(
-            "What I'm seeing still doesn't match what you're telling me. Can you verify which system is authoritative and explain the mismatch?",
-            "我看到的状态还是和你说的不一致。你能确认哪个系统是权威记录，并解释一下为什么会不一致吗？",
+            "What I'm seeing still doesn't match what you're telling me. Which system is authoritative, and what exactly is causing the mismatch?",
+            "我看到的信息还是和你说的不一致。到底哪个系统才是权威记录？造成不一致的具体原因是什么？",
         )
     if state.session_phase == "resolved":
-        return L("Thanks. Can you confirm there isn't anything else I need to do on my side?", "谢谢。你能确认我这边已经不需要再做任何操作了吗？")
-    if state.recommended_action_code == "act_on_root_cause":
-        return L("Can you explain what you found and what you can do now to actually fix it?", "你能解释一下你查到了什么，以及现在具体可以怎么解决吗？")
-    return L("Can you tell me what you've verified so far and what the next concrete step is?", "你能告诉我目前已经确认了什么，以及下一步具体要做什么吗？")
+        return L(
+            "Thanks. Can you confirm there isn't anything else I need to do on my side before we wrap up?",
+            "谢谢。结束之前，你能确认我这边已经不需要再做其他事情了吗？",
+        )
+    if any(k in low for k in ["confirmation number", "reservation number", "order number", "booking reference", "ticket number"]):
+        return L(
+            "Sure — the reference is on hand. Before I share it, can you tell me exactly what you'll verify once you pull it up?",
+            "可以，我这边有编号。不过在我发给你之前，你能先告诉我你调出来之后会具体核实什么吗？",
+        )
+    if any(k in low for k in ["24", "48", "business day", "within", "refund", "timeframe", "eta"]):
+        return L(
+            "Thanks. What exact timeline should I expect, and what should I do if that deadline passes without an update?",
+            "好的。那我应该预期一个怎样的具体时间线？如果过了这个时间还没有更新，我应该怎么做？",
+        )
+    if any(k in low for k in ["verify", "checking", "investigat", "look into", "review"]):
+        return L(
+            "Can you tell me what you've already verified so far and what the next concrete step is?",
+            "你能告诉我目前已经核实了哪些信息，以及下一步具体会做什么吗？",
+        )
+    if any(k in low for k in ["blocker", "cause", "root cause", "preventing", "holding"]):
+        return L(
+            "Can you explain the blocker in plain language and what action will remove it?",
+            "你能用直白一点的话解释这个阻塞点是什么，以及要采取什么动作才能解除它吗？",
+        )
+    turn_count = sum(1 for row in state.transcript if row.get("role") == "agent")
+    variants = [
+        L("What is the next action you'll take on your side to move this forward?", "你这边下一步会采取什么动作来推进处理？"),
+        L("Can you be specific about what changed in the system versus what still hasn't changed yet?", "你能具体说说系统里已经发生了什么变化、还有哪些地方还没变吗？"),
+        L("Before we move on, what is the most important thing I should understand about the case right now?", "在继续之前，目前这个问题里我最应该先理解清楚的关键信息是什么？"),
+    ]
+    return variants[turn_count % len(variants)]
 
 
 def _use_manual_suggestion(suggestion: str) -> None:
@@ -978,7 +1139,7 @@ if scenario_tab.open:
                 st.caption(domain_description(scenario_domain))
         with control2:
             channel_label = st.selectbox(
-                L("Conversation channel", "对话渠道"), list(CHANNELS), index=0, key="scenario_channel", format_func=display_channel,
+                L("Conversation channel", "对话渠道"), SCENARIO_CHANNELS, index=0, key="scenario_channel", format_func=display_channel,
             )
             st.caption(channel_hint(channel_label))
         with control3:
@@ -1005,6 +1166,7 @@ if scenario_tab.open:
                         rewrite_kwargs["language"] = _language_prompt_name()
                     scenario, scenario_provider = enhance_scenario_with_deepseek(scenario, **rewrite_kwargs)
                 scenario = prepare_scenario_for_channel(scenario, channel_label)
+                scenario = localize_generated_scenario(scenario)
             if int(st.session_state.get("generation_epoch", 0)) == epoch:
                 st.session_state.live_scenario = scenario
                 st.session_state.live_state = new_scenario_state(scenario, capacity_k=scenario_k)
@@ -1100,7 +1262,7 @@ if manual_tab.open:
             manual_domain = st.selectbox(L("Domain", "领域"), domains, key="manual_domain", format_func=display_domain)
             st.caption(domain_description(manual_domain))
         with m2:
-            manual_channel = st.selectbox(L("Channel", "渠道"), list(CHANNELS), index=3, key="manual_channel", format_func=display_channel)
+            manual_channel = st.selectbox(L("Channel / input mode", "渠道 / 输入模式"), list(MANUAL_MODE_CONFIG), index=4, key="manual_channel", format_func=display_channel)
             st.caption(channel_hint(manual_channel))
         with m3:
             manual_k = st.slider(L("JSpace capacity K", "JSpace 容量 K"), 3, 6, 4, key="manual_k")
@@ -1135,65 +1297,79 @@ if manual_tab.open:
                 render_conversation(manual_state.transcript, active_manual_channel, slot=conversation_slot)
 
                 if not manual_state.session_ended:
-                    suggestion = suggested_customer_prompt(active_manual_domain, manual_state)
+                    mode_cfg = manual_mode_config(active_manual_channel)
+                    suggestion = suggested_customer_prompt(active_manual_domain, manual_state) if mode_cfg["show_suggestion"] else ""
                     if st.session_state.pop("manual_input_reset_pending", False):
                         st.session_state["manual_chat_input"] = ""
                     st.session_state.setdefault("manual_chat_input", "")
 
-                    with st.container(key="manual_composer"):
-                        compose_col, suggest_col = st.columns([4.15, 1.35], gap="small", vertical_alignment="bottom")
-                        with compose_col:
-                            # A form makes Enter and the Send button submit the exact same turn.
-                            with st.form("manual_chat_form", clear_on_submit=False):
-                                input_col, send_col = st.columns([5.35, 1.10], gap="small", vertical_alignment="bottom")
-                                with input_col:
-                                    prompt = st.text_input(
-                                        L("Customer message", "客户消息"),
-                                        key="manual_chat_input",
-                                        placeholder=L("Type what the customer says…", "输入客户想说的话…"),
-                                        label_visibility="collapsed",
+                    prompt = ""
+                    send = False
+                    if mode_cfg["allow_text"]:
+                        with st.container(key="manual_composer"):
+                            compose_col, suggest_col = st.columns([4.2, 1.3], gap="small", vertical_alignment="bottom")
+                            with compose_col:
+                                with st.form("manual_chat_form", clear_on_submit=False):
+                                    input_col, send_col = st.columns([5.2, 1.15], gap="small", vertical_alignment="bottom")
+                                    with input_col:
+                                        prompt = st.text_input(
+                                            L("Customer message", "客户消息"),
+                                            key="manual_chat_input",
+                                            placeholder=L(*mode_cfg["placeholder"]),
+                                            label_visibility="collapsed",
+                                        )
+                                    with send_col:
+                                        send = st.form_submit_button(L("Send", "发送"), type="primary", use_container_width=True)
+                            with suggest_col:
+                                if mode_cfg["show_suggestion"]:
+                                    st.markdown(
+                                        f'<div class="j-suggest-mini"><strong>{L("Suggested prompt", "建议提示")}</strong><br>{html.escape(suggestion)}</div>',
+                                        unsafe_allow_html=True,
                                     )
-                                with send_col:
-                                    send = st.form_submit_button(L("Send", "发送"), type="primary", use_container_width=True)
-                        with suggest_col:
-                            st.markdown(
-                                f'<div class="j-suggest-mini"><strong>{L("Suggested prompt", "建议提示")}</strong><br>{html.escape(suggestion)}</div>',
-                                unsafe_allow_html=True,
-                            )
-                            st.button(
-                                L("Use prompt", "填入输入框"),
-                                key="use_manual_suggestion",
-                                use_container_width=True,
-                                on_click=_use_manual_suggestion,
-                                args=(suggestion,),
-                                help=L("Fill the chat box immediately; then press Enter or Send.", "立即填入聊天框，然后按 Enter 或点击发送。"),
-                            )
-
-                    media_types = {
-                        "Text Messages": ["png", "jpg", "jpeg", "webp"],
-                        "Voice Call": ["mp3", "wav", "m4a", "ogg"],
-                        "Video + Voice": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "avi", "webm"],
-                        "Multimodal Mix": ["png", "jpg", "jpeg", "webp", "mp3", "wav", "m4a", "ogg", "mp4", "mov", "avi", "webm"],
-                    }
-                    with st.expander(L("Add multimodal evidence (optional)", "添加多模态证据（可选）"), expanded=False):
-                        media_files = st.file_uploader(
-                            L("Attach evidence for this turn", "为本轮添加证据"),
-                            type=media_types[active_manual_channel], accept_multiple_files=True,
-                            key=f"manual_media_{st.session_state.get('manual_media_key', 0)}",
-                            help=L("Images use DeepSeek Vision, audio uses Hy-ASR transcription, and video uses YT-VITA. Outputs become explicit JSpace evidence.", "图片由 DeepSeek Vision 分析，音频由 Hy-ASR 转写，视频由 YT-VITA 分析；结果都会成为明确的 JSpace 证据。"),
+                                    if st.button(
+                                        L("Use prompt", "填入输入框"),
+                                        key="use_manual_suggestion",
+                                        use_container_width=True,
+                                        help=L("Fill the chat box immediately; then press Enter or Send.", "立即填入聊天框，然后按 Enter 或点击发送。"),
+                                    ):
+                                        st.session_state["manual_chat_input"] = suggestion
+                                        st.rerun()
+                    else:
+                        st.markdown(
+                            f'<div class="j-suggest-mini"><strong>{L("Selected input mode", "当前输入模式")}</strong><br>{html.escape(channel_hint(active_manual_channel))}</div>',
+                            unsafe_allow_html=True,
                         )
-                        if media_files:
-                            st.caption(L("Attached: ", "已添加：") + ", ".join(f.name for f in media_files))
-                        video_url = ""
-                        if active_manual_channel in {"Video + Voice", "Multimodal Mix"}:
-                            video_url = st.text_input(
-                                L("Public video URL (optional)", "公开视频 URL（可选）"),
-                                key=f"manual_video_url_{st.session_state.get('manual_media_key', 0)}",
-                                placeholder="https://.../clip.mp4",
-                                help=L("A public URL is the most reliable YT-VITA path; local uploads use a best-effort data URL.", "公开 URL 是 YT-VITA 最可靠的方式；本地上传会尝试使用 data URL。"),
+
+                    media_files = []
+                    video_url = ""
+                    allowed_types = mode_cfg["file_types"]
+                    if allowed_types or mode_cfg["allow_video_url"]:
+                        with st.expander(L("Add evidence for this turn (optional)", "为本轮添加证据（可选）"), expanded=False):
+                            if allowed_types:
+                                media_files = st.file_uploader(
+                                    L("Attach evidence for this turn", "为本轮添加证据"),
+                                    type=allowed_types, accept_multiple_files=True,
+                                    key=f"manual_media_{st.session_state.get('manual_media_key', 0)}",
+                                    help=L("Only files supported by the selected mode are accepted in this uploader.", "上传器只接受当前模式支持的文件类型。"),
+                                )
+                                if media_files:
+                                    st.caption(L("Attached: ", "已添加：") + ", ".join(f.name for f in media_files))
+                            if mode_cfg["allow_video_url"]:
+                                video_url = st.text_input(
+                                    L("Public video URL (optional)", "公开视频 URL（可选）"),
+                                    key=f"manual_video_url_{st.session_state.get('manual_media_key', 0)}",
+                                    placeholder="https://.../clip.mp4",
+                                    help=L("A public URL is the most reliable YT-VITA path; local uploads use a best-effort data URL.", "公开 URL 是 YT-VITA 最可靠的方式；本地上传会尝试使用 data URL。"),
+                                )
+                        if not mode_cfg["allow_text"]:
+                            send = st.button(
+                                L("Analyze & send evidence", "分析并发送证据"),
+                                type="primary", use_container_width=True,
+                                key=f"manual_media_submit_{active_manual_channel}",
                             )
 
                     end_now = st.button(L("End session", "结束会话"), use_container_width=True, key="manual_end_session")
+
 
                     if send and ((prompt or "").strip() or media_files or (video_url or "").strip()):
                         customer_text = (prompt or "").strip() or L("[Customer attached media evidence for this turn.]", "[客户为本轮添加了媒体证据。]")
