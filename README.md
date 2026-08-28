@@ -1,4 +1,10 @@
-# JSpace Live — v1.4.3
+# JSpace Live — v1.4.4
+
+## v1.4.4 updates
+
+- The **website's Save conversation as PDF button is now wired directly to the verified plain-text transcript exporter** used for the v1.4.3 samples. The UI no longer calls the legacy `build_conversation_pdf` entry point.
+- Download filenames now end in `_transcript.pdf`, and the Streamlit download-widget key is versioned (`plain_v144`) to prevent a browser/hot-reload session from retaining an older PDF payload.
+- The legacy `build_conversation_pdf` name remains only as a backward-compatible alias to the plain-text renderer; there is no separate bubble/card PDF implementation left.
 
 ## v1.4.3 updates
 

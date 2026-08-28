@@ -138,7 +138,7 @@ def _provider_summary(transcript: list[dict]) -> str:
     return "; ".join(seen) if seen else "-"
 
 
-def build_conversation_pdf(
+def build_plain_transcript_pdf(
     *,
     transcript: list[dict],
     profile: dict,
@@ -333,3 +333,12 @@ def build_conversation_pdf(
 
     doc.build(story, onFirstPage=decorate_page, onLaterPages=decorate_page)
     return buf.getvalue()
+
+
+def build_conversation_pdf(**kwargs) -> bytes:
+    """Backward-compatible alias for the v1.4.4 plain-text website exporter.
+
+    New UI code should call :func:`build_plain_transcript_pdf` directly so a
+    stale deployment cannot silently keep using an older chat-card renderer.
+    """
+    return build_plain_transcript_pdf(**kwargs)
