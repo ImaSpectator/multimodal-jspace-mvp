@@ -1,5 +1,7 @@
 # JSpace Live — v1.4.0
 
+Webiste URL: https://multimodal-jspace-mvp-xl8khikqwpvcxh44x3cjvq.streamlit.app/
+
 ## Updates
 
 - Manual Multimodal AI now follows a **Scenario-Lab-like conversation arc** instead of preloading the diagnosis and collapsing into the same three turns. The simulated backend starts unresolved, reveals the root cause after a short discovery exchange, then waits for a later explicit customer authorization before marking the remediation resolved.
