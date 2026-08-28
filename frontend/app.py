@@ -42,6 +42,7 @@ from backend.jspace.ai_provider import (  # noqa: E402
 from backend.jspace.engine import merge_concepts, refresh_state  # noqa: E402
 from backend.jspace.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
 from backend.jspace.schemas import ImageObservation, ScenarioControls  # noqa: E402
+from backend.jspace.localization import conflict_description_zh  # noqa: E402
 from backend.jspace.simulator import (  # noqa: E402
     append_agent_reply,
     apply_manual_customer_message,
@@ -1291,12 +1292,16 @@ def display_conflict_severity(severity: str) -> str:
 
 
 def display_conflict_description(conflict) -> str:
-    """Show the conflict explanation in the active UI language."""
+    """Show the conflict explanation in the active UI language.
+
+    Chinese mode also localizes stale Conflict objects created before
+    `description_zh` existed, so a hot-reloaded/redeployed session cannot keep
+    showing an English paragraph inside an otherwise Chinese conflict card.
+    """
+    raw = str(getattr(conflict, "description", "") or "")
     if _is_zh():
-        localized = str(getattr(conflict, "description_zh", "") or "").strip()
-        if localized:
-            return localized
-    return str(getattr(conflict, "description", "") or "")
+        return conflict_description_zh(raw, getattr(conflict, "description_zh", ""))
+    return raw
 
 
 def render_workspace(state, *, show_coaching: bool = True) -> None:
