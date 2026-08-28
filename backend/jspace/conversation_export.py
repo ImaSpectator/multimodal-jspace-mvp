@@ -138,7 +138,7 @@ def _provider_summary(transcript: list[dict]) -> str:
     return "; ".join(seen) if seen else "-"
 
 
-def build_plain_transcript_pdf(
+def build_conversation_pdf(
     *,
     transcript: list[dict],
     profile: dict,
@@ -335,10 +335,12 @@ def build_plain_transcript_pdf(
     return buf.getvalue()
 
 
-def build_conversation_pdf(**kwargs) -> bytes:
-    """Backward-compatible alias for the v1.4.4 plain-text website exporter.
+def build_plain_transcript_pdf(**kwargs) -> bytes:
+    """Descriptive alias for the canonical plain-text conversation exporter.
 
-    New UI code should call :func:`build_plain_transcript_pdf` directly so a
-    stale deployment cannot silently keep using an older chat-card renderer.
+    The website intentionally imports ``build_conversation_pdf`` because that
+    name existed in earlier deployments. Keeping the stable import contract
+    prevents Streamlit Cloud hot-reloads from failing when ``app.py`` updates
+    before a cached ``conversation_export`` module is refreshed.
     """
-    return build_plain_transcript_pdf(**kwargs)
+    return build_conversation_pdf(**kwargs)

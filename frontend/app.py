@@ -29,7 +29,7 @@ from backend.jspace.ai_provider import (  # noqa: E402
     stream_support_reply,
 )
 from backend.jspace.engine import merge_concepts, refresh_state  # noqa: E402
-from backend.jspace.conversation_export import build_plain_transcript_pdf  # noqa: E402
+from backend.jspace.conversation_export import build_conversation_pdf  # noqa: E402
 from backend.jspace.scenario_generator import generate_manual_context, generate_scenario, list_domains  # noqa: E402
 from backend.jspace.schemas import ImageObservation, ScenarioControls  # noqa: E402
 from backend.jspace.simulator import (  # noqa: E402
@@ -1370,9 +1370,10 @@ def render_post_session_actions(state, profile: dict, domain: str, channel_label
                 st.session_state[provider_key] = analysis_provider
                 st.rerun()
     analysis_text = st.session_state.get(analysis_key, "")
-    # v1.4.4: the website download uses the same plain-text transcript renderer
-    # as the verified PDF samples. Do not replace this with the legacy card/bubble exporter.
-    pdf_bytes = build_plain_transcript_pdf(
+    # v1.4.5: use the long-lived export entry point so Streamlit Cloud can safely
+    # hot-reload across versions. build_conversation_pdf itself is the plain-text
+    # transcript renderer; this avoids importing a brand-new symbol during deploy.
+    pdf_bytes = build_conversation_pdf(
         transcript=state.transcript, profile=profile, domain=display_domain(domain), channel=display_channel(channel_label),
         session_id=state.session_id, satisfaction=state.customer_satisfaction, phase=state.session_phase,
         language=_language_prompt_name(), analysis=analysis_text or None,
@@ -1383,7 +1384,7 @@ def render_post_session_actions(state, profile: dict, domain: str, channel_label
             file_name=f"jspace_{mode}_{state.session_id}_transcript.pdf", mime="application/pdf",
             # Version the widget key so Streamlit/browser state cannot retain an older
             # download payload after a hot redeploy of the PDF implementation.
-            key=f"download_pdf_plain_v144_{state.session_id}", use_container_width=True,
+            key=f"download_pdf_plain_v145_{state.session_id}", use_container_width=True,
         )
     if analysis_text:
         st.markdown(analysis_text)

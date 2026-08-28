@@ -25,16 +25,16 @@ def _kwargs():
     )
 
 
-def test_v144_website_download_is_wired_to_plain_transcript_renderer():
+def test_v144_website_download_uses_stable_plain_transcript_entrypoint():
     source = (ROOT / "frontend" / "app.py").read_text()
-    assert "from backend.jspace.conversation_export import build_plain_transcript_pdf" in source
-    assert "pdf_bytes = build_plain_transcript_pdf(" in source
+    assert "from backend.jspace.conversation_export import build_conversation_pdf" in source
+    assert "pdf_bytes = build_conversation_pdf(" in source
     assert 'file_name=f"jspace_{mode}_{state.session_id}_transcript.pdf"' in source
-    assert 'key=f"download_pdf_plain_v144_{state.session_id}"' in source
-    assert "pdf_bytes = build_conversation_pdf(" not in source
+    assert 'key=f"download_pdf_plain_v145_{state.session_id}"' in source
+    assert "from backend.jspace.conversation_export import build_plain_transcript_pdf" not in source
 
 
-def test_v144_legacy_export_name_is_only_an_alias_to_plain_renderer():
+def test_v144_both_export_names_render_the_same_plain_transcript():
     direct = build_plain_transcript_pdf(**_kwargs())
     legacy = build_conversation_pdf(**_kwargs())
     for data in (direct, legacy):

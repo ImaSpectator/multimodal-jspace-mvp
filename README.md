@@ -1,4 +1,12 @@
-# JSpace Live — v1.4.4
+# JSpace Live — v1.4.5
+
+
+## v1.4.5 updates
+
+- Fixed the Streamlit Cloud startup `ImportError` caused by `app.py` importing the newly introduced `build_plain_transcript_pdf` symbol while a previous `conversation_export` module could still be cached during a hot redeploy.
+- The website now imports the long-lived `build_conversation_pdf` name again. That function is now the **canonical plain-text transcript renderer**, so the downloaded PDF keeps the approved v1.4.3/v1.4.4 plain-text format without relying on a new import name.
+- `build_plain_transcript_pdf` remains available as a descriptive alias for tests or external callers.
+- The PDF download widget key is bumped to `plain_v145` so an existing Streamlit session cannot retain the previous download payload.
 
 ## v1.4.4 updates
 
