@@ -90,7 +90,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-APP_VERSION = "1.4.1-pdf-natural-dialogue"
+APP_VERSION = "1.4.2-scenario-parity-pdf-rework"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -936,6 +936,19 @@ def concept_rows(state) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+
+CONFLICT_SEVERITY_LABELS = {
+    "high": ("HIGH PRIORITY SIGNAL CONFLICT", "高优先级信号冲突"),
+    "medium": ("MEDIUM PRIORITY SIGNAL CONFLICT", "中优先级信号冲突"),
+    "low": ("LOW PRIORITY SIGNAL CONFLICT", "低优先级信号冲突"),
+}
+
+
+def display_conflict_severity(severity: str) -> str:
+    key = str(severity or "medium").strip().lower()
+    en, zh = CONFLICT_SEVERITY_LABELS.get(key, (f"{key.upper()} PRIORITY SIGNAL CONFLICT", f"{key}优先级信号冲突"))
+    return zh if _is_zh() else en
+
 def render_workspace(state, *, show_coaching: bool = True) -> None:
     st.markdown(L("#### Live JSpace", "#### 实时 JSpace"))
     if show_coaching:
@@ -958,7 +971,7 @@ def render_workspace(state, *, show_coaching: bool = True) -> None:
     if state.conflicts:
         for conflict in state.conflicts:
             st.markdown(
-                f'<div class="j-card j-conflict"><div class="j-card-title">{html.escape((conflict.severity.upper()+" SIGNAL CONFLICT") if not _is_zh() else ("信号冲突 · "+conflict.severity))}</div><div class="j-card-value">{html.escape(conflict.description)}</div></div>',
+                f'<div class="j-card j-conflict"><div class="j-card-title">{html.escape(display_conflict_severity(conflict.severity))}</div><div class="j-card-value">{html.escape(conflict.description)}</div></div>',
                 unsafe_allow_html=True,
             )
 
@@ -1153,20 +1166,28 @@ def _manual_ready_to_close(state) -> bool:
 
 
 def _unused_customer_move(state, candidates: list[str]) -> str:
-    """Pick a move that the customer has not already used in this transcript."""
+    """Choose an unused natural customer line without exposing simulation mechanics."""
     used = {str(r.get("text") or "").strip() for r in getattr(state, "transcript", []) if r.get("role") == "customer"}
     for candidate in candidates:
-        if candidate.strip() not in used:
+        candidate = str(candidate or "").strip()
+        if candidate and candidate not in used:
             return candidate
-    n = sum(1 for r in getattr(state, "transcript", []) if r.get("role") == "agent")
-    return L(
-        f"Okay. Please carry out the next concrete action from what you've already verified; this is turn {n + 1}, so I don't want to repeat earlier steps.",
-        f"好的。请基于你已经核实的信息直接执行下一项具体操作；现在已经是第 {n + 1} 轮了，我不想再重复之前的步骤。",
-    )
+    # Never fall back to simulation meta-language. If a small candidate bank is
+    # exhausted, use a plain customer reply instead.
+    natural_fallbacks = [
+        L("Okay. Please just get this sorted out for me.", "好的，请直接帮我把这个问题处理好。"),
+        L("Understood. I just need the issue taken care of now.", "明白。我现在只需要把这个问题解决掉。"),
+        L("Thanks. Please go ahead with the fix.", "谢谢，请直接继续修复。"),
+    ]
+    for candidate in natural_fallbacks:
+        if candidate not in used:
+            return candidate
+    return natural_fallbacks[0]
 
 
 def _varied_customer_move(state, candidates: list[str], salt: str) -> str:
-    """Rotate a candidate bank by session/turn so separate practices do not feel scripted."""
+    """Rotate a natural candidate bank by session/turn so practices do not feel scripted."""
+    candidates = [str(x).strip() for x in candidates if str(x or "").strip()]
     if not candidates:
         return ""
     customer_turns = sum(1 for r in getattr(state, "transcript", []) if r.get("role") == "customer")
@@ -1177,12 +1198,12 @@ def _varied_customer_move(state, candidates: list[str], salt: str) -> str:
 
 
 def suggested_customer_prompt(domain: str, state) -> str:
-    """Suggest the next *customer* line, not an instruction to the support agent.
+    """Suggest the next line as a manual version of Scenario Lab.
 
-    Manual mode uses the same staged case progression as Scenario Lab, but the
-    suggestion itself should sound like something a real customer would naturally
-    type.  It therefore favors concrete context, reactions, and short requests over
-    meta-language such as "what have you verified" or "which check comes next".
+    The customer moves through the same realistic arc: issue -> impact -> prior context
+    -> diagnosis -> authorize the fix -> acknowledge resolution -> close.  Suggestions
+    are customer dialogue only; they never mention turn numbers, prompts, verification
+    mechanics, or ask the agent to narrate its internal workflow.
     """
     case = getattr(state, "manual_context", {}) or {}
     customer_turns = sum(1 for r in getattr(state, "transcript", []) if r.get("role") == "customer")
@@ -1196,85 +1217,71 @@ def suggested_customer_prompt(domain: str, state) -> str:
     if state.session_ended:
         return ""
 
-    # Once the support-side state is resolved, do not make the customer ask for
-    # verification again.  The natural next move is simply to acknowledge and close.
+    # Resolution is a terminal state in the simulation.  The next customer move is
+    # gratitude/closure, not another request to confirm what was already confirmed.
     if _manual_ready_to_close(state):
-        return _varied_customer_move(state, [
-            L("Great, that's everything I needed. Thanks for getting it sorted out!", "太好了，这就是我需要的。谢谢你帮我处理好！"),
-            L("Perfect, I can see it's fixed now. Thanks for your help today.", "好的，我这边现在也看到已经正常了。谢谢你今天的帮助。"),
-            L("That takes care of it for me. Thanks, and have a good day!", "这样就解决了。谢谢你，祝你今天愉快！"),
+        closings = list(case.get("closings") or [])
+        if _is_zh():
+            closings = []
+        return _varied_customer_move(state, closings + [
+            L("No, that's everything. Thanks for getting it sorted out.", "没有其他问题了。谢谢你帮我处理好。"),
+            L("That's all I needed. Thank you for fixing it.", "这就是我需要的。谢谢你帮我修复。"),
+            L("No other questions. I appreciate the help.", "没有其他问题了，谢谢你的帮助。"),
         ], "closing")
 
-    last_agent = next((str(row.get("text") or "") for row in reversed(state.transcript) if row.get("role") == "agent"), "")
-    low = last_agent.lower()
-    action = str(getattr(state, "recommended_action_code", "") or "")
+    authoritative = next((c for c in getattr(state, "concepts", []) if getattr(c, "name", "") == "authoritative_status"), None)
+    authoritative_unresolved = bool(authoritative and str(getattr(authoritative, "value", "")).lower() != "resolved")
+    has_root = any(getattr(c, "name", "") == "root_cause" for c in getattr(state, "concepts", []))
 
-    # The first two follow-ups come from the generated case, exactly like Scenario Lab.
-    # They add realistic context instead of asking the agent to narrate its workflow.
+    # These first turns come directly from the generated manual case, just like the
+    # first turns in Scenario Lab.
     if customer_turns == 1:
-        impact = str(case.get("impact") or "").strip()
-        candidates = [x for x in [
-            impact,
-            L("This is pretty time-sensitive for me, so I mainly need to know what this means for me today.", "这件事对我比较紧急，我主要想知道它今天会对我有什么影响。"),
-            L("I'm trying to avoid this turning into a bigger problem later today.", "我主要是不想让这个问题今天晚些时候变得更麻烦。"),
-        ] if x]
-        return _varied_customer_move(state, candidates, "impact")
+        return _varied_customer_move(state, [
+            str(case.get("impact") or ""),
+            L("This is time-sensitive for me, so I need to know what it means for me today.", "这件事对我比较紧急，我需要知道今天会有什么影响。"),
+        ], "impact")
 
     if customer_turns == 2:
-        followup = str(case.get("followup") or "").strip()
-        candidates = [x for x in [
-            followup,
-            L("I've already tried the obvious steps on my side, so I don't want to keep repeating the same thing.", "我这边已经试过最基本的办法了，不想再一直重复同样的操作。"),
-            L("I just want to make sure I'm not going to run into the same issue again once I leave this chat.", "我只是想确保结束聊天以后不会马上又遇到同样的问题。"),
-        ] if x]
-        return _varied_customer_move(state, candidates, "prior-context")
-
-    # When the case engine has exposed the root cause, a real customer normally wants
-    # the issue fixed; they do not keep asking the agent to describe another check.
-    if action == "act_on_root_cause":
         return _varied_customer_move(state, [
-            L("Okay, that makes sense. Please go ahead and fix that on your side.", "好的，这样就说得通了。请直接帮我在你们这边修复吧。"),
-            L("Got it. Yes, please make that change so we can get this resolved.", "明白了。可以，请直接做这个更改，把问题解决掉。"),
-            L("That explains what I've been seeing. Please fix the underlying issue.", "这就能解释我看到的情况了。请直接处理这个底层问题。"),
-            L("Thanks, that explanation is clear. Please go ahead with the fix.", "谢谢，解释得很清楚。请继续帮我修复吧。"),
+            str(case.get("followup") or ""),
+            L("I've already tried the basic steps on my side, so I don't want to start over again.", "我这边已经试过基本步骤了，不想再从头开始。"),
+        ], "prior-context")
+
+    # If customer-visible evidence conflicts with the company record, let the customer
+    # naturally mention what they see once.  Do not keep re-asking for verification.
+    if getattr(state, "conflicts", []) and not has_root:
+        apparent = str(case.get("apparent") or "").strip()
+        if apparent:
+            return _varied_customer_move(state, [apparent], "visible-conflict")
+
+    # The next useful customer move is to ask for the cause.  The resulting agent turn
+    # receives the simulated diagnostic result immediately.
+    if not has_root:
+        root_questions = list(case.get("root_questions") or [])
+        if _is_zh():
+            root_questions = []
+        return _varied_customer_move(state, root_questions + [
+            L("What did you find, and can you fix the actual cause from your side?", "你查到具体原因了吗？如果可以，请直接从你们这边修复。"),
+            L("So what is causing this, and can you take care of it from your side?", "所以具体是什么原因？你们这边可以直接处理吗？"),
+        ], "diagnosis")
+
+    # Once the cause is known, a real customer wants the fix.  This message authorizes
+    # remediation; the simulator completes the backend action on this same turn so the
+    # agent can respond with a resolved/not-resolved result instead of saying to wait.
+    if has_root and authoritative_unresolved:
+        fix_requests = list(case.get("fix_requests") or [])
+        if _is_zh():
+            fix_requests = []
+        return _varied_customer_move(state, fix_requests + [
+            L("Okay, that makes sense. Please go ahead and fix it.", "好的，这样就说得通了。请直接帮我修复。"),
+            L("Understood. Please make that correction so we can get this resolved.", "明白了。请直接做这个更改，把问题解决掉。"),
+            L("Thanks for explaining it. Yes, please take care of the fix on your side.", "谢谢你的解释。可以，请直接从你们这边处理好。"),
         ], "authorize-fix")
 
-    if action == "avoid_repetition":
-        return _varied_customer_move(state, [
-            L("Right, I've already done those steps. I'd rather continue from where we are now.", "对，这些步骤我已经做过了。我们直接从现在的进度继续吧。"),
-            L("Yes, that's what I already tried. I don't want to start over again.", "对，这些我已经试过了。我不想再从头来一遍。"),
-            L("I've done that already, so please don't send me through the same troubleshooting again.", "这个我已经做过了，所以请不要再让我重复同样的排查。"),
-        ], "avoid-repeat")
-
-    # If the support answer says the current record is still unresolved, react to that
-    # result instead of asking the agent to "keep checking" indefinitely.
-    if action in {"investigate", "resolve_conflict"}:
-        apparent = str(case.get("apparent") or "").strip()
-        final = str(case.get("final") or "").strip()
-        candidates = [x for x in [
-            apparent if customer_turns == 3 else "",
-            final if customer_turns >= 4 else "",
-            L("Okay, so it sounds like it isn't actually finished yet. I just need this resolved before it causes another problem.", "好的，那听起来这件事其实还没有真正完成。我只希望在它造成其他问题之前把它解决掉。"),
-            L("That explains why what I'm seeing doesn't line up. I mainly need the actual issue fixed now.", "这就解释了为什么我看到的信息对不上。我现在主要需要把真正的问题解决掉。"),
-            L("Understood. I can wait a moment, but I don't want to keep going in circles on the same status.", "明白。我可以等一下，但我不想一直围绕同一个状态来回确认。"),
-        ] if x]
-        return _varied_customer_move(state, candidates, "unresolved-result")
-
-    # If the agent genuinely asked for a missing reference, answer naturally rather
-    # than turning the suggestion into another diagnostic question.
-    if any(k in low for k in ["confirmation number", "reservation number", "order number", "booking reference", "ticket number", "reference number"]):
-        return _varied_customer_move(state, [
-            L("Sure, I have the reference handy. I'll provide it so you can pull up the case.", "可以，我手边有相关编号。我现在提供给你，你可以直接调取这个案例。"),
-            L("Yes, I have that information available. I'll send it over now.", "有的，我有这项信息。我现在发给你。"),
-        ], "reference")
-
-    # Acknowledgements are useful customer turns too.  Do not force every turn into a
-    # question simply to keep the conversation moving.
     return _varied_customer_move(state, [
-        L("Okay, thanks. I just want to get this fully sorted out without having to start over again.", "好的，谢谢。我只希望这次能彻底处理好，不用之后再从头来一遍。"),
-        L("That makes sense. I'm following - please continue from there.", "这样说得通。我明白了，请从这里继续处理。"),
-        L("Understood. The main thing for me is making sure the issue is actually taken care of.", "明白。对我来说最重要的是确保这个问题真的被处理好。"),
-    ], "default-natural")
+        L("Okay, thanks. Please make sure it's fully taken care of.", "好的，谢谢。请确保这次彻底处理好。"),
+        L("That makes sense. I just need this sorted out now.", "这样说得通。我现在只需要把问题处理好。"),
+    ], "natural-default")
 
 def _queue_manual_suggestion(suggestion: str) -> None:
     """Queue a prompt before the chat widget is instantiated on the next rerun.

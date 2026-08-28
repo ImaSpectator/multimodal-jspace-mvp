@@ -36,6 +36,28 @@ class ScenarioRewrite(BaseModel):
     turns: list[str] = Field(min_length=6, max_length=12)
 
 
+def _clean_scenario_rewrite(candidate: str, emotion: str, fallback: str) -> str:
+    """Reject rewrite artifacts that sound grammatically broken or mood-inconsistent."""
+    text = str(candidate or "").strip()
+    if not text:
+        return fallback
+    # Common model/style artifacts seen in Scenario Lab.
+    if re.search(r"(?:because|:)\s+i\b", text):
+        return fallback
+    if re.search(r"[.!?]\s+[a-z]", text):
+        return fallback
+    negative = str(emotion or "").lower() in {
+        "uncertain", "confused", "anxious", "disappointed", "frustrated",
+        "angry", "impatient", "skeptical", "distressed",
+    }
+    if negative and any(phrase in text.lower() for phrase in [
+        "good, we're getting somewhere", "great, we're getting somewhere",
+        "perfect, that sounds great",
+    ]):
+        return fallback
+    return text
+
+
 def _compact_concepts(concepts: Iterable[Concept]) -> str:
     rows = []
     for c in concepts:
@@ -93,22 +115,29 @@ def build_support_prompt(
     previous_agent = _last_agent_reply(state)
     latest_customer = _latest_customer_message(state)
     customer_turn_count = sum(1 for row in state.transcript if row.get("role") == "customer")
-    manual_pacing = ""
-    if str(state.session_id).startswith("manual_") and state.session_phase not in {"resolved", "closing", "ended"}:
-        if customer_turn_count <= 2:
-            manual_pacing = (
-                "This is an early manual-practice discovery turn. Do not rush to a fix or closure. "
-                "Use the current case state as the result of the support-side check and give the customer a concrete present-tense answer. "
-                "Do not make them wait for a later verification result."
+    simulation_pacing = ""
+    is_simulation = str(state.session_id).startswith(("manual_", "scenario_"))
+    if is_simulation:
+        if state.session_phase == "resolved":
+            simulation_pacing = (
+                "The simulated support action has already completed. Reply in past/present tense: state what was corrected, confirm the issue is resolved now, and ask once whether anything else is needed. "
+                "Do not describe another pending check or future action."
+            )
+        elif state.session_phase == "closing":
+            simulation_pacing = (
+                "The customer is done. Give one brief final thank-you/goodbye and do not reopen the case."
+            )
+        elif customer_turn_count <= 2:
+            simulation_pacing = (
+                "This is an early discovery turn. Use the current case state as the completed result of any support-side lookup available now. Give a concrete present-tense answer; never create a fake waiting period."
             )
         elif state.recommended_action_code == "act_on_root_cause":
-            manual_pacing = (
-                "The diagnosis is now available. State the finding as the completed result of the support-side check, explain how it connects to the customer's symptoms, "
-                "and offer the concrete remediation. Do not claim the remediation completed unless authoritative_status is resolved."
+            simulation_pacing = (
+                "The diagnosis is available now. State the cause as a completed finding and explain the concrete remediation. If the state is unresolved, ask for permission only if the customer has not already authorized the fix; if the state is resolved, state that the correction has already been completed."
             )
         else:
-            manual_pacing = (
-                "Keep the exchange conversational and progressive. Add a new fact, verification, or action instead of repeating the same troubleshooting language."
+            simulation_pacing = (
+                "Keep the exchange progressive. Report the current result once, then move to diagnosis or action. Do not manufacture additional verification turns."
             )
     anti_repeat = (
         f"\nPrevious agent reply that MUST NOT be repeated or lightly paraphrased:\n{previous_agent}\n"
@@ -131,12 +160,13 @@ Goals:
 - Do not repeat troubleshooting the customer already completed.
 - Never repeat or recycle the previous agent response. Each turn must advance the conversation with a new fact, explanation, verification, or action.
 - If evidence conflicts, explain the mismatch naturally and report the current authoritative result; do not narrate an endless series of future checks.
-- In this practice simulation, the Active JSpace state is the completed result of any support-side lookup available on this turn. Never say "I'm checking", "I'm pulling it up", "I'll verify", "I'll let you know", or ask the customer to wait for a check that the simulation cannot actually perform later.
+- In this practice simulation, the Active JSpace state is the completed result of any support-side lookup available on this turn. Never say "I'm checking", "I'm pulling it up", "I'll verify", "I'll update you", "I'll let you know", "give me a moment", or ask the customer to wait for a result that the simulation cannot actually deliver later.
+- Do not narrate future work when the simulated state already contains the result. Use present/past-tense outcomes: "I checked...", "I found...", "I corrected...", "the system now shows...".
 - If authoritative_status is unresolved, say clearly that the check is NOT confirmed/resolved yet and use the current state to explain why. If it is resolved, say clearly that it IS confirmed/resolved.
 - Ask a customer question only when genuinely missing information is required. Do not ask filler questions just to prolong the conversation.
 - If image evidence is attached, use it when it materially changes the situation.
 - {closure_rule}
-- {manual_pacing or "Use normal customer-service pacing: discover, verify, act, confirm, then close."}
+- {simulation_pacing or "Use normal customer-service pacing: discover, verify, act, confirm, then close."}
 
 Domain: {domain}
 Customer context: {profile}
@@ -266,16 +296,16 @@ def _fallback_reply(state: SessionState, preferred: str | None = None, *, langua
             "The evidence is still inconsistent, so I don’t want to guess. The current authoritative record says the issue is not resolved yet, and that is the status I’m using.",
         ],
         "act_on_root_cause": [
-            "I’ve narrowed this to a concrete underlying blocker. I’m working from that cause now and will explain the fix rather than sending you through generic troubleshooting.",
-            "We now have a likely root cause, so the next step is targeted remediation rather than another retry on your side.",
-            "The issue is no longer just a generic failure—I have a specific blocker to work from. I’m using that to determine the corrective action now.",
-            "I’ve isolated the likely cause. I’m moving to the fix for that condition instead of repeating steps that don’t address it.",
+            "I found the concrete underlying blocker. That explains the symptom, and the correct next action is targeted remediation rather than repeating generic troubleshooting.",
+            "I found the root cause, so the case is ready for targeted remediation rather than another retry on your side.",
+            "The issue is no longer a generic failure: I found the specific blocker, and it points to a concrete corrective action.",
+            "I isolated the likely cause. The appropriate fix targets that condition instead of repeating steps that do not address it.",
         ],
         "avoid_repetition": [
-            "I have the steps you already completed, so I won’t make you repeat them. I’m moving to the next diagnostic check that can actually change the outcome.",
-            "Your previous troubleshooting is noted. I’m skipping those repeated steps and checking the next system-side cause instead.",
-            "You’ve already done the basic checks, so I’m not sending you through them again. I’m escalating the investigation to the next useful signal.",
-            "I’m keeping the work you already did in context. The next step will be a new check, not another retry of the same thing.",
+            "I have the steps you already completed, so I won’t make you repeat them. The case is now on the system-side diagnostic path rather than the same basic troubleshooting.",
+            "Your previous troubleshooting is noted. I’ve skipped those repeated steps and moved to the system-side cause instead.",
+            "You’ve already done the basic checks, so I’m not sending you through them again. The remaining evidence is on the system side.",
+            "I’m keeping the work you already did in context. The case has moved beyond those repeated steps.",
         ],
         "confirm_resolution": [
             "The system now reflects the resolution. Is there anything else you’d like me to check before we wrap up?",
@@ -288,16 +318,16 @@ def _fallback_reply(state: SessionState, preferred: str | None = None, *, langua
             "That completes the case. Thanks for your time today, and I hope the rest of your day goes smoothly.",
         ],
         "investigate": [
-            "I checked the current account and system details. The issue is still unresolved, so the next step needs to address the backend blocker rather than repeat generic troubleshooting.",
-            "I checked the current system state, and it is still unresolved. I’m keeping the case open rather than calling it fixed prematurely.",
-            "I reviewed the latest system state and the most relevant evidence. It is not confirmed resolved yet, so I’ll work from the blocker the system is showing.",
-            "I checked the current verifiable state, and it still shows the issue as incomplete. I’ll use that result to address what is preventing completion.",
+            "I checked the current account and system details. The issue is still unresolved, and the blocker is on the backend rather than in the steps you already completed.",
+            "I checked the current system state, and it is still unresolved. I won’t call it fixed while the authoritative record still says otherwise.",
+            "I reviewed the latest system state and the most relevant evidence. It is not resolved yet, and the authoritative record is the status that matters.",
+            "I checked the current verifiable state, and it still shows the issue as incomplete. That confirms the problem is still on the system side.",
         ],
     }
     options = variants.get(state.recommended_action_code or "", variants.get("default", [
-        "I’m reviewing the current details so I can give you a new, useful next step without making you repeat yourself.",
-        "I’m checking the latest state now and will focus the next step on what can actually move the issue forward.",
-        "I’m comparing the latest evidence so I can answer your question directly and avoid recycling the same troubleshooting advice.",
+        "I have the current details in context, so I can move forward without making you repeat yourself.",
+        "The latest state is in context, and the next response should focus only on what actually moves the issue forward.",
+        "The latest evidence is in context, so the answer can move forward without recycling the same troubleshooting advice.",
     ]))
     # Choose the first variant not already used in this transcript.
     for option in options:
@@ -305,6 +335,95 @@ def _fallback_reply(state: SessionState, preferred: str | None = None, *, langua
             return option
     return options[len(previous_agents) % len(options)]
 
+
+
+_SIMULATION_FUTURE_PHRASES = [
+    "i'm checking", "i’m checking", "i'm pulling", "i’m pulling", "let me check",
+    "i'll verify", "i’ll verify", "i'll update", "i’ll update", "i'll let you know",
+    "i’ll let you know", "give me a moment", "please wait", "wait a moment",
+    "come back with", "i'm confirming", "i’m confirming", "actively verifying",
+    "i'll confirm", "i’ll confirm", "i'll come back", "i’ll come back",
+    "我正在查", "我再查一下", "我会核实", "我会确认", "稍等", "等一下", "之后告诉你",
+]
+
+
+def _is_simulation_session(state: SessionState) -> bool:
+    return str(state.session_id).startswith(("manual_", "scenario_"))
+
+
+def _concept_value(state: SessionState, name: str) -> str:
+    concept = next((c for c in state.concepts if c.name == name), None)
+    return str(getattr(concept, "value", "") or "").strip()
+
+
+def _state_grounded_simulation_reply(state: SessionState, *, language: str) -> str:
+    """Return a synchronous support reply grounded in the current simulated state.
+
+    In Scenario Lab and Manual practice, there is no background worker that can come
+    back minutes later. This responder treats the state on the current turn as the
+    completed result of that support-side work.
+    """
+    chinese = _language_is_chinese(language)
+    phase = str(state.session_phase or "active")
+    status = _concept_value(state, "authoritative_status").lower()
+    root = _concept_value(state, "root_cause")
+
+    if phase in {"closing", "ended"}:
+        return (
+            "好的，这边已经全部处理完成。感谢你的耐心，祝你今天顺利。"
+            if chinese else
+            "You’re all set. Thanks for your patience, and have a great rest of your day."
+        )
+    if phase == "resolved" or status == "resolved":
+        return (
+            "我已经完成了系统侧的修复，现在后台状态显示问题已解决。还有其他问题需要我一起处理吗？"
+            if chinese else
+            "I completed the system-side correction, and the backend now shows the issue as resolved. Is there anything else I can help with?"
+        )
+    if root:
+        if chinese:
+            return "我已经定位到具体的后台阻塞原因，这也解释了你看到的异常。当前问题还没有标记为解决；如果你同意，我可以直接按这个原因执行修复。"
+        return f"I found the underlying blocker: {root}. That explains what you’re seeing. The issue is not marked resolved yet; if you want, I can apply the targeted fix now."
+    if state.conflicts:
+        return (
+            "我已经核对了后台记录。你看到的状态和公司系统仍然不一致，目前后台仍显示未解决，所以现在还不能确认问题已经修复。"
+            if chinese else
+            "I checked the backend record. What you’re seeing still conflicts with the company system, and the authoritative status is unresolved, so I can’t confirm the issue as fixed yet."
+        )
+    return (
+        "我已经核对了当前系统状态，问题目前仍未解决。这是本轮检查的结果，不需要你等待另一个后台回复。"
+        if chinese else
+        "I checked the current system state, and the issue is still unresolved. That is the result of this turn’s system check, so there is no separate background update to wait for."
+    )
+
+
+def _enforce_simulation_reply(state: SessionState, text: str, *, language: str) -> str:
+    """Prevent impossible asynchronous narration from reaching the UI.
+
+    Prompt instructions alone were not sufficient: a model could still emit "I'm
+    pulling the backend now" and that text was streamed to the user before we could
+    correct it.  For generated practice sessions we validate the completed reply and
+    replace invalid future-check narration with the deterministic state-grounded
+    responder.
+    """
+    candidate = str(text or "").strip()
+    if not _is_simulation_session(state) or not candidate:
+        return candidate
+    low = candidate.lower()
+    if any(phrase in low for phrase in _SIMULATION_FUTURE_PHRASES):
+        return _state_grounded_simulation_reply(state, language=language)
+
+    if state.session_phase == "resolved":
+        resolved_tokens = [
+            "resolved", "fixed", "all set", "completed", "corrected", "restored",
+            "已解决", "已修复", "处理完成", "恢复正常", "已经处理好",
+        ]
+        if not any(token in low for token in resolved_tokens):
+            return _state_grounded_simulation_reply(state, language=language)
+    if state.session_phase == "closing" and "?" in candidate:
+        # A final goodbye should not reopen the conversation with another question.
+        return _state_grounded_simulation_reply(state, language=language)
+    return candidate
 
 def _image_content_parts(media: list[dict] | None, prompt: str) -> list[dict] | str:
     images = []
@@ -365,7 +484,13 @@ def generate_support_reply(
     language: str = "English",
 ) -> tuple[str, str]:
     """Return (reply, provider label) through Tencent TokenHub DeepSeek."""
-    local_reply = _fallback_reply(state, fallback, language=language)
+    local_reply = (
+        _state_grounded_simulation_reply(state, language=language)
+        if _is_simulation_session(state)
+        else _fallback_reply(state, fallback, language=language)
+    )
+    if _is_simulation_session(state) and state.session_phase in {"resolved", "closing", "ended"}:
+        return local_reply, "Simulated system result"
     if not api_key:
         return local_reply, "Local simulation"
 
@@ -388,6 +513,7 @@ def generate_support_reply(
             ))
             text = (response.choices[0].message.content or "").strip()
             if text and not _too_similar_to_previous(state, text):
+                text = _enforce_simulation_reply(state, text, language=language)
                 label = f"DeepSeek · {model}" if attempt == 1 else f"DeepSeek · {model} · retry recovered"
                 return text, label
             last_exc = RuntimeError("empty or repetitive DeepSeek response")
@@ -420,7 +546,14 @@ def stream_support_reply(
     language: str = "English",
 ) -> Iterator[tuple[str, str, bool]]:
     """Yield progressively growing DeepSeek output with bounded retry and repeat protection."""
-    local_reply = _fallback_reply(state, fallback, language=language)
+    local_reply = (
+        _state_grounded_simulation_reply(state, language=language)
+        if _is_simulation_session(state)
+        else _fallback_reply(state, fallback, language=language)
+    )
+    if _is_simulation_session(state) and state.session_phase in {"resolved", "closing", "ended"}:
+        yield local_reply, "Simulated system result", True
+        return
     if not api_key:
         yield local_reply, "Local simulation", True
         return
@@ -430,6 +563,42 @@ def stream_support_reply(
         state, customer_profile, domain, channel,
         history_turns=history_turns, reply_sentences=reply_sentences, language=language,
     )
+
+    # Generated practice sessions are buffered until the model finishes.  Previously
+    # unsafe text such as "I'm pulling the backend now" could already be visible in
+    # the UI before a final-response guard had a chance to reject it.  A single final
+    # yield preserves the typing state while guaranteeing the displayed response is a
+    # valid synchronous simulation result.
+    if _is_simulation_session(state):
+        last_exc: Exception | None = None
+        for attempt in range(1, max(1, max_attempts) + 1):
+            prompt = base_prompt
+            if attempt > 1:
+                prompt += "\n\nRETRY INSTRUCTION: Give a fresh, present-tense result. Do not narrate a future check or waiting period."
+            try:
+                response = client.chat.completions.create(**_request_kwargs(
+                    model=model,
+                    messages=_chat_messages(state, prompt, media),
+                    max_tokens=max_output_tokens,
+                    stream=False,
+                ))
+                text = (response.choices[0].message.content or "").strip()
+                text = _enforce_simulation_reply(state, text, language=language)
+                if text and not _too_similar_to_previous(state, text):
+                    label = f"DeepSeek · {model}" if attempt == 1 else f"DeepSeek · {model} · retry recovered"
+                    yield text, label, True
+                    return
+                last_exc = RuntimeError("empty, repetitive, or invalid simulation response")
+            except Exception as exc:
+                last_exc = exc
+                if not _is_transient_error(exc) or attempt >= max_attempts:
+                    break
+            if attempt < max_attempts:
+                time.sleep(0.12 * attempt)
+        reason = type(last_exc).__name__ if last_exc else "Unavailable"
+        yield local_reply, f"Local fallback after bounded retry ({reason})", True
+        return
+
     last_exc: Exception | None = None
     previous = _normalize_text(_last_agent_reply(state))
 
@@ -798,6 +967,7 @@ def enhance_scenario_with_deepseek(
     try:
         client = _cached_client(api_key, base_url, timeout_s)
         base_turns = [s.customer_turn.text for s in scenario.steps]
+        emotions = [s.customer_turn.emotion for s in scenario.steps]
         language_rule = "Write title, problem_summary, and every turn entirely in Simplified Chinese (简体中文)." if _language_is_chinese(language) else "Write title, problem_summary, and every turn entirely in natural English."
         prompt = f"""
 Create a realistic customer-service simulation for this controlled case. Keep factual ground truth unchanged.
@@ -809,11 +979,14 @@ Customer profile: {scenario.customer_profile}
 Ground truth that MUST NOT be contradicted: {scenario.hidden_ground_truth}
 Number of customer turns required: {len(base_turns)}
 Base turn intents in order: {base_turns}
+Customer emotion in the same order: {emotions}
 
 Return ONLY JSON with keys title, problem_summary, turns.
 - turns must contain exactly {len(base_turns)} strings in the same logical order.
 - Keep each turn conversational and 1-3 sentences.
-- Preserve the emotional trajectory; do not make every message angry.
+- Match each rewritten turn to its corresponding emotion label; do not use upbeat progress language when that turn is frustrated, skeptical, angry, anxious, or disappointed.
+- Use correct sentence capitalization and grammar. Never produce artifacts such as "because i..." or a lowercase sentence after a period.
+- Do not use generic lines like "Good, we're getting somewhere" unless the corresponding emotion is genuinely positive and the wording fits the situation.
 - Vary wording/details to avoid repetitive scenarios.
 - Preserve resolution and closing semantics.
 - The final customer turn must clearly say there are no other questions or concerns.
@@ -834,8 +1007,9 @@ Return ONLY JSON with keys title, problem_summary, turns.
         updated.title = rewrite.title.strip() or scenario.title
         updated.problem_summary = rewrite.problem_summary.strip() or scenario.problem_summary
         for step, new_text in zip(updated.steps, rewrite.turns):
-            if new_text.strip():
-                step.customer_turn.text = new_text.strip()
+            step.customer_turn.text = _clean_scenario_rewrite(
+                new_text, step.customer_turn.emotion, step.customer_turn.text
+            )
         updated.generated_by_ai = True
         return updated, f"DeepSeek · {model}"
     except Exception as exc:

@@ -291,9 +291,11 @@ def recommend_action(state: SessionState) -> tuple[str, str]:
     authoritative = active.get("authoritative_status")
     if authoritative and authoritative.value == "resolved" and not state.conflicts:
         return "confirm_resolution", "Confirm the resolution clearly, then ask whether the customer has any other questions or concerns."
-    if state.conflicts:
-        return "resolve_conflict", "Verify the authoritative system state, explain the mismatch, and avoid confirming resolution prematurely."
 
+    # Once a root cause is known, move to remediation even if customer-visible evidence
+    # still conflicts with the backend.  Prioritizing the conflict forever created an
+    # artificial loop where both the customer and agent kept re-verifying the same
+    # mismatch instead of fixing the diagnosed cause.
     root = active.get("root_cause")
     domain = active.get("customer_domain")
     if root:
@@ -319,6 +321,9 @@ def recommend_action(state: SessionState) -> tuple[str, str]:
             "marketplace_dispute": "complete the outstanding remediation or offer the valid remedy",
         }
         return "act_on_root_cause", f"Use the confirmed root cause — {root.value} — to {verbs.get(d, 'take the next concrete resolution step')}."
+
+    if state.conflicts:
+        return "resolve_conflict", "Report the authoritative result clearly, explain the mismatch once, and move toward diagnosis rather than repeatedly re-checking it."
 
     if active.get("avoid_repeat_action"):
         return "avoid_repetition", "Do not repeat troubleshooting the customer already completed; move to the next diagnostic step."

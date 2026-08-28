@@ -373,38 +373,45 @@ def _cue(rng: random.Random, emotion: str, intensity: float) -> str:
     return f"{base}; intensity {intensity:.0%}"
 
 
+def _join_emotion_prefix(prefix: str, text: str) -> str:
+    """Join a complete mood cue without damaging sentence capitalization."""
+    if not prefix or not text:
+        return text
+    return prefix + text
+
+
 def _style_text(rng: random.Random, text: str, emotion: str, intensity: float, profile: dict) -> str:
     if rng.random() > 0.78:
         return text
+    # Each cue is a complete sentence, so the original scenario sentence keeps its
+    # intended capitalization. Positive cues are deliberately mild and are only used
+    # when the simulated emotion itself is positive.
     prefix_options = {
-        "angry": ["I need a straight answer here — ", "This is getting really frustrating — "],
-        "frustrated": ["I'm getting frustrated because ", "At this point, "],
-        "impatient": ["I need a quick answer: ", "Can we get to the actual fix? "],
-        "anxious": ["I'm a little worried — ", "I really need to know: "],
-        "confused": ["I'm confused because ", "What I don't understand is this: "],
-        "skeptical": ["I need you to verify this — ", "I don't want to assume the screen is right: "],
+        "angry": ["I need a straight answer here. ", "This is really frustrating. "],
+        "frustrated": ["This is getting frustrating. ", "I'm frustrated that this is still happening. "],
+        "impatient": ["I need a quick answer here. ", "I'd really like to get to the actual fix. "],
+        "anxious": ["I'm a little worried about this. ", "I really need some clarity here. "],
+        "confused": ["I'm confused about what's happening. ", "I don't understand why these two things don't match. "],
+        "skeptical": ["I need you to be certain here. ", "I don't want to rely on the screen if the system says something different. "],
         "disappointed": ["I'm disappointed this is still happening. ", "I was hoping this would be straightforward. "],
         "distressed": ["I really need help with this now. ", "This is becoming pretty stressful. "],
-        "hopeful": ["Hopefully we're close — ", "That sounds promising, but "],
-        "relieved": ["Okay, that's a relief. ", "Good, we're getting somewhere. "],
-        "appreciative": ["Thanks for checking. ", "I appreciate that. "],
-        "curious": ["Just so I understand, ", "Can you clarify one thing? "],
+        "hopeful": ["That sounds more promising. ", "Hopefully we're close to getting this resolved. "],
+        "relieved": ["Okay, that's helpful. ", "That helps. "],
+        "appreciative": ["Thanks for checking. ", "I appreciate the help. "],
+        "curious": ["I just want to make sure I understand. ", "Can you clarify one thing for me? "],
     }
     prefixes = prefix_options.get(emotion)
-    styled = (rng.choice(prefixes) + text[0].lower() + text[1:]) if prefixes and text else text
+    styled = _join_emotion_prefix(rng.choice(prefixes), text) if prefixes and text else text
     style = profile.get("communication_style")
     if style == "concise" and len(styled) > 145:
         styled = styled.split(". ")[0].rstrip(".") + "."
-    elif style == "question-heavy" and "?" not in styled:
-        styled = styled.rstrip(".") + " — can you confirm?"
-    elif style == "detail-oriented" and rng.random() < 0.28:
-        styled += " I want to make sure the system record matches what I'm seeing."
     return styled
 
-
-def _make_turn(rng: random.Random, text: str, emotion: str, intensity: float, profile: dict) -> CustomerTurn:
+def _make_turn(
+    rng: random.Random, text: str, emotion: str, intensity: float, profile: dict, *, decorate: bool = True
+) -> CustomerTurn:
     return CustomerTurn(
-        text=_style_text(rng, text, emotion, intensity, profile),
+        text=_style_text(rng, text, emotion, intensity, profile) if decorate else text,
         emotion=emotion,
         emotion_intensity=intensity,
         nonverbal_cue=_cue(rng, emotion, intensity),
@@ -470,9 +477,9 @@ def generate_scenario(controls: ScenarioControls) -> GeneratedScenario:
 
     emotion, intensity = _next_emotion(rng, emotion, intensity, "root_cause", include_conflict, profile)
     root_question = rng.choice([
-        "So what is actually causing this, and can you fix it from your side?",
-        "What did you find? I mainly want to understand what is blocking this.",
-        "Okay — what is the real cause, and what's the next step?",
+        "What did you find, and can you fix the actual cause from your side?",
+        "So what is causing this, and can you take care of it from your side?",
+        "What is the underlying issue? If you can fix it on your side, please do.",
     ])
     steps.append(ScenarioStep(
         label="Diagnostic result becomes available",
@@ -482,49 +489,29 @@ def generate_scenario(controls: ScenarioControls) -> GeneratedScenario:
         ],
     ))
 
-    # Vary the troubleshooting depth before resolution. The conversation never ends
-    # while the system-of-record is unresolved; it progresses into explicit resolution
-    # confirmation and a normal support closing exchange.
-    extra_turn_count = rng.randint(0, 3)
-    extra_prompts = [
-        "Is there anything else in the account history that explains why this happened?",
-        "Can you check whether this affects anything else connected to my account?",
-        "Before you change anything, can you confirm what you are seeing on your side?",
-        "What should I expect to see once the fix actually goes through?",
-        "Do you need anything else from me to finish this properly?",
-    ]
-    for i in range(extra_turn_count):
-        emotion, intensity = _next_emotion(rng, emotion, intensity, "root_cause", include_conflict, profile)
-        steps.append(ScenarioStep(
-            label=f"Additional troubleshooting context {i+1}",
-            customer_turn=_make_turn(rng, rng.choice(extra_prompts), emotion, intensity, profile),
-        ))
-
+    # Once the diagnosis is known, the next customer turn authorizes the fix and the
+    # simulated company system completes it on that same turn.  This represents the
+    # few minutes a real support agent would spend doing the work without forcing the
+    # customer through several artificial "I'm still checking" turns.
     emotion, intensity = _next_emotion(rng, emotion, intensity, "closing", include_conflict, profile)
-    steps.append(ScenarioStep(
-        label="Customer asks for resolution details",
-        customer_turn=_make_turn(rng, b["final"], emotion, intensity, profile),
-    ))
-
-    # The simulated company system now reports the corrective action completed.
-    emotion = rng.choice(["hopeful", "relieved", "appreciative", "satisfied"])
-    intensity = round(rng.uniform(0.45, 0.78), 2)
-    resolution_text = rng.choice([
-        "Okay, I can see the change on my side now. Can you confirm the issue is actually resolved?",
-        "That looks better now. Is the system showing everything as fixed on your side too?",
-        "I think that worked. Can you confirm we're fully resolved before we wrap up?",
+    remediation_request = rng.choice([
+        "Okay, that makes sense. Please go ahead and fix it.",
+        "Understood. Please make that correction so we can get this resolved.",
+        "Thanks for explaining it. Yes, please take care of the fix on your side.",
     ])
     steps.append(ScenarioStep(
-        label="Resolution confirmed",
-        customer_turn=_make_turn(rng, resolution_text, emotion, intensity, profile),
+        label="Issue resolved after remediation",
+        customer_turn=_make_turn(rng, remediation_request, emotion, intensity, profile, decorate=False),
         backend_events=[
-            _event("resolution", "authoritative_status", "resolved",
-                   evidence="support workflow completed and system-of-record now confirms resolution",
-                   relevance=1.0, confidence=0.995, conflict_importance=0.0),
+            _event(
+                "resolution", "authoritative_status", "resolved",
+                evidence="support remediation completed and the system-of-record confirms resolution",
+                relevance=1.0, confidence=0.995, conflict_importance=0.0,
+            ),
         ],
     ))
 
-    # A normal service conversation explicitly checks for other concerns before ending.
+    # After the agent confirms the completed fix, the customer closes naturally.
     emotion = rng.choice(["satisfied", "relieved", "appreciative", "calm"])
     intensity = round(rng.uniform(0.35, 0.68), 2)
     steps.append(ScenarioStep(
@@ -532,11 +519,11 @@ def generate_scenario(controls: ScenarioControls) -> GeneratedScenario:
         customer_turn=_make_turn(
             rng,
             rng.choice([
-                "No, that's everything. Thanks for helping me get it sorted out.",
-                "No other questions — that was the only issue. Thank you.",
-                "That's all I needed. I appreciate you checking it properly.",
+                "No, that's everything. Thanks for getting it sorted out.",
+                "That's all I needed. Thank you for fixing it.",
+                "No other questions. I appreciate the help.",
             ]),
-            emotion, intensity, profile,
+            emotion, intensity, profile, decorate=False,
         ),
     ))
 
@@ -588,6 +575,21 @@ def generate_manual_context(domain: str, seed: int | None = None) -> tuple[dict,
         "root_cause": b["root_cause"],
         "root_evidence": b["root_evidence"],
         "root_cause_event": root_event.model_dump(),
+        "root_questions": [
+            "What did you find, and can you fix the actual cause from your side?",
+            "So what is causing this, and can you take care of it from your side?",
+            "What is the underlying issue? If you can fix it on your side, please do.",
+        ],
+        "fix_requests": [
+            "Okay, that makes sense. Please go ahead and fix it.",
+            "Understood. Please make that correction so we can get this resolved.",
+            "Thanks for explaining it. Yes, please take care of the fix on your side.",
+        ],
+        "closings": [
+            "No, that's everything. Thanks for getting it sorted out.",
+            "That's all I needed. Thank you for fixing it.",
+            "No other questions. I appreciate the help.",
+        ],
     }
     events = [
         _event("profile", "customer_domain", domain, evidence=f"customer service domain={domain}", relevance=0.99, confidence=0.99),

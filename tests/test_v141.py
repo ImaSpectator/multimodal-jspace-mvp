@@ -23,8 +23,10 @@ def test_v141_manual_can_resolve_on_natural_fourth_customer_turn():
     apply_manual_customer_message(state, profile["_manual_case"]["opening"])
     apply_manual_customer_message(state, profile["_manual_case"]["impact"])
     apply_manual_customer_message(state, profile["_manual_case"]["followup"])
+    assert not any(c.name == "root_cause" for c in state.concepts)
+    apply_manual_customer_message(state, "What did you find, and can you fix the actual cause from your side?")
     assert any(c.name == "root_cause" for c in state.concepts)
-    apply_manual_customer_message(state, "Okay, that makes sense. Please go ahead and fix that on your side.")
+    apply_manual_customer_message(state, "Okay, that makes sense. Please go ahead and fix it.")
     assert next(c for c in state.concepts if c.name == "authoritative_status").value == "resolved"
     assert state.session_phase == "resolved"
 
@@ -38,7 +40,7 @@ def test_v141_manual_suggestions_avoid_meta_diagnostic_language():
     ]
     for text in banned:
         assert text not in src
-    assert "Please go ahead and fix that on your side." in src
+    assert "Please go ahead and fix it." in src
     assert "Acknowledge and close" not in src
 
 

@@ -16,19 +16,20 @@ def test_v14_manual_diagnosis_is_progressive_not_preloaded():
     apply_manual_customer_message(state, "I need this today.")
     assert not any(c.name == "root_cause" for c in state.concepts)
     apply_manual_customer_message(state, "I've retried it already.")
+    assert not any(c.name == "root_cause" for c in state.concepts)
+    apply_manual_customer_message(state, "What is actually causing this?")
     assert any(c.name == "root_cause" for c in state.concepts)
 
 
-def test_v14_manual_cannot_collapse_to_three_turn_resolution():
+def test_v14_manual_resolves_on_explicit_fix_request_once_context_exists():
     profile, backend = generate_manual_context("account_access", seed=3)
     state = new_manual_state(capacity_k=4, backend_events=backend, profile=profile)
     apply_manual_customer_message(state, "I can't log in.")
-    apply_manual_customer_message(state, "Please go ahead and fix it.")
-    apply_manual_customer_message(state, "I already reset the password. Please do it.")
+    apply_manual_customer_message(state, "I already reset my password.")
     assert next(c for c in state.concepts if c.name == "authoritative_status").value == "unresolved"
-    apply_manual_customer_message(state, "What will the change do?")
-    apply_manual_customer_message(state, "Okay, please go ahead with the fix.")
+    apply_manual_customer_message(state, "Please fix it from your side.")
     assert next(c for c in state.concepts if c.name == "authoritative_status").value == "resolved"
+    assert state.session_phase == "resolved"
 
 
 def test_v14_manual_agent_prompt_has_real_conversation_pacing():
@@ -36,15 +37,15 @@ def test_v14_manual_agent_prompt_has_real_conversation_pacing():
     state = new_manual_state(capacity_k=4, backend_events=backend, profile=profile)
     apply_manual_customer_message(state, "My package isn't here.")
     prompt = build_support_prompt(state, profile, "delivery")
-    assert "early manual-practice discovery turn" in prompt
-    assert "Do not rush to a fix or closure" in prompt
+    assert "completed result of any support-side lookup" in prompt
+    assert "never create a fake waiting period" in prompt
 
 
 def test_v14_pdf_uses_independent_full_width_cards():
     src = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert "archive-friendly conversation report" in src
+    assert "archive-quality conversation record" in src
     assert "PageBreak()" in src
-    assert "Customer and support messages are preserved in chronological order" in src
+    assert "one self-contained block" in src
     pdf = build_conversation_pdf(
         transcript=[
             {"role": "customer", "text": "Customer detail " * 80},
@@ -65,6 +66,6 @@ def test_v14_pdf_uses_independent_full_width_cards():
 
 def test_v14_toolbar_optical_offsets():
     source = (ROOT / "frontend" / "app.py").read_text()
-    assert 'APP_VERSION = "1.4.1-pdf-natural-dialogue"' in source
+    assert 'APP_VERSION = "1.4.2-scenario-parity-pdf-rework"' in source
     assert "transform:translateX(4px)!important" in source
     assert source.count("transform:translateX(4px)!important") >= 2

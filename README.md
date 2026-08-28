@@ -2,6 +2,11 @@
 
 ## Updates
 
+- Manual suggested prompts now mirror Scenario Lab as customer dialogue: issue -> impact -> prior context -> diagnosis -> fix authorization -> resolution -> natural close. Meta prompts that mention turn numbers, verification mechanics, or "next concrete action" are removed.
+- Manual and Scenario Lab are synchronous simulations: support-side checks are treated as completed on the current turn. Once the customer asks for a fix after establishing the issue, the simulated remediation can complete immediately and the agent confirms the resolved state instead of creating an endless "I am checking" loop.
+- Scenario Lab customer wording now preserves sentence capitalization and uses complete mood cues, preventing broken grammar such as "because i..." and avoiding upbeat lines that do not match the simulated customer mood.
+- Signal-conflict severity labels are fully bilingual and explicit: HIGH/MEDIUM/LOW PRIORITY SIGNAL CONFLICT in English and 高/中/低优先级信号冲突 in Chinese.
+- PDF export is completely reworked as a structured customer-support interaction report rather than a chat screenshot: case issue/outcome, session overview, experience metrics, numbered customer-agent exchanges, page-safe wrapping, separate post-session review, and traceability footer.
 - PDF export is redesigned as an archive-friendly conversation report with session details, readable metric cards, full-width message records, page numbers, and analysis on a separate page.
 - Manual suggested customer messages now sound like customer speech rather than diagnostic instructions; acknowledgements and context statements are allowed instead of forcing a question every turn.
 - Manual support replies treat the simulated case state as the completed result of a backend check, so the agent says whether the issue is confirmed/unconfirmed instead of repeatedly promising to verify it later.

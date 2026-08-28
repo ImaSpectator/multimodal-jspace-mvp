@@ -133,23 +133,44 @@ def update_customer_relationship(profile: dict, state: SessionState, reply: str,
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
-    """Advance hidden manual-case evidence with Scenario-Lab-like pacing.
+def _customer_requests_resolution(text: str) -> bool:
+    """Return True for natural customer authorization/request language.
 
-    The previous implementation exposed the root cause at session start and allowed a
-    second customer message containing "go ahead" to resolve the case.  That made the
-    suggested path collapse into the same three turns every time.  Manual mode now
-    reveals diagnosis after a short discovery exchange and only commits the simulated
-    remediation after the customer has had a chance to hear the cause and explicitly authorize
-    the fix on a later turn.
+    This deliberately matches normal speech ("I just need this resolved", "can you
+    fix it", "please take care of it") rather than only a small set of scripted
+    button-like phrases.  Pure status questions such as "is it resolved?" do not
+    count as authorization.
     """
-    low = (text or "").lower()
+    low = (text or "").lower().strip()
+    request_patterns = [
+        "please fix", "can you fix", "could you fix", "fix it", "fix this",
+        "please resolve", "can you resolve", "get this resolved", "need this resolved",
+        "need it resolved", "get it sorted", "sort this out", "take care of it",
+        "take care of this", "go ahead", "please proceed", "make that change",
+        "make the change", "please handle", "do whatever you need", "do it",
+        "请修复", "请解决", "帮我解决", "把这个问题解决", "请处理", "帮我处理",
+        "请继续处理", "就按这个做", "请直接处理",
+    ]
+    return any(pattern in low for pattern in request_patterns)
+
+
+def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
+    """Advance the manual simulation using the same cause -> fix -> confirm arc as Scenario Lab.
+
+    Manual mode is synchronous.  A real support action may take a few minutes, but the
+    simulation should represent that work as completed between the customer's request
+    and the agent's response.  It must not create an endless sequence of "I'm checking"
+    turns that can never produce an asynchronous result.
+    """
     customer_turns = sum(1 for row in state.transcript if row.get("role") == "customer")
 
-    # Stage 1 -> Stage 2: after opening + impact + prior context, the diagnostic
-    # becomes available.  This mirrors Scenario Lab's explicit diagnostic step.
+    # After a short discovery exchange, make the hidden diagnostic result available.
+    # If the customer explicitly asks for a fix after the issue has been established,
+    # the same turn completes the simulated work. This compresses the few minutes a
+    # real agent would spend working into one synchronous simulation response.
     has_root = any(c.name == "root_cause" for c in state.concepts)
-    if customer_turns >= 3 and not has_root:
+    requests_resolution = _customer_requests_resolution(text)
+    if not has_root and (customer_turns >= 4 or (customer_turns >= 2 and requests_resolution)):
         raw = (state.manual_context or {}).get("root_cause_event")
         if raw:
             try:
@@ -159,31 +180,22 @@ def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
                 refresh_state(state)
                 has_root = True
             except Exception:
-                # A malformed optional case-plan entry should never break a live chat.
                 pass
 
-    # Stage 2 -> Stage 3: do not let the first mention of a fix instantly complete
-    # the case.  A normal conversation gets at least one turn to discuss the
-    # diagnosis before an explicit authorization can resolve the simulated backend.
-    action_language = any(token in low for token in [
-        "go ahead", "please do", "please apply", "please proceed", "proceed",
-        "make that change", "fix it", "please resolve", "you can do that",
-        "that works", "do it", "请继续", "请处理", "请帮我处理", "可以处理",
-        "就按这个做", "请修复", "请把", "那就这样处理",
-    ])
-    if customer_turns < 4 or not has_root or not action_language:
+    if not has_root or not requests_resolution:
         return
 
     authoritative = next((c for c in state.concepts if c.name == "authoritative_status"), None)
     if not authoritative or str(authoritative.value).lower() == "resolved":
         return
+
     event = BackendEvent(
         event_type="manual_resolution",
         value="resolved",
         metadata={
             "concept_name": "authoritative_status",
             "concept_value": "resolved",
-            "evidence": "simulated support remediation completed after diagnosis discussion and explicit customer authorization",
+            "evidence": "simulated support remediation completed during this turn and the system-of-record confirms resolution",
             "relevance": 1.0,
             "confidence": 0.995,
             "conflict_importance": 0.0,
@@ -193,7 +205,6 @@ def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
     merge_concepts(state.concepts, extract_from_backend(event))
     state.session_phase = "resolved"
     refresh_state(state)
-
 
 def apply_scenario_customer_step(scenario: GeneratedScenario, state: SessionState, step_index: int) -> SessionState:
     """Apply only the customer/evidence half of a scenario turn.

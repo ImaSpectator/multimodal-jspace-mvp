@@ -13,7 +13,7 @@ def _source():
 
 def test_v13_toolbar_is_fixed_borderless_and_top_right():
     source = _source()
-    assert 'APP_VERSION = "1.4.1-pdf-natural-dialogue"' in source
+    assert 'APP_VERSION = "1.4.2-scenario-parity-pdf-rework"' in source
     assert 'position:fixed!important' not in source
     assert 'st.columns([12.0, 1.15, .72, .72, .72, .72]' in source
     assert 'border:0!important' in source
@@ -27,7 +27,7 @@ def test_v13_suggestions_have_unused_move_and_closing_logic():
     source = _source()
     assert 'def _unused_customer_move' in source
     assert 'if _manual_ready_to_close(state):' in source
-    assert "Great, that's everything I needed. Thanks for getting it sorted out!" in source
+    assert "No, that's everything. Thanks for getting it sorted out." in source
     assert 'anything else' in source and 'other questions' in source
 
 
@@ -45,10 +45,10 @@ def test_v13_manual_closing_turn_ends_after_agent_goodbye():
 
 def test_v13_pdf_uses_full_width_separate_message_cards():
     source = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert 'archive-friendly conversation report' in source
+    assert 'archive-quality conversation record' in source
     assert 'PageBreak()' in source
-    assert 'borderPadding' in source
-    assert 'nested flowables and offset chat bubbles' in source
+    assert 'one self-contained block' in source
+    assert 'screenshot-like chat export' in source
     pdf = build_conversation_pdf(
         transcript=[
             {"role":"customer","text":"This is a longer customer message that should wrap safely without touching the next message. " * 4},

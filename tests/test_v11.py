@@ -10,7 +10,7 @@ def _source():
 
 def test_v11_borderless_toolbar_and_link_icon():
     source = _source()
-    assert 'APP_VERSION = "1.4.1-pdf-natural-dialogue"' in source
+    assert 'APP_VERSION = "1.4.2-scenario-parity-pdf-rework"' in source
     assert ':material/link:' in source
     assert 'background:transparent!important; box-shadow:none!important;' in source
     assert 'border:0!important' in source
@@ -19,10 +19,10 @@ def test_v11_borderless_toolbar_and_link_icon():
 
 def test_v11_suggested_moves_are_not_question_only():
     source = _source()
-    assert 'Suggest the next *customer* line, not an instruction to the support agent.' in source
-    assert 'Please go ahead and fix that on your side.' in source
-    assert "I've done that already, so please don't send me through the same troubleshooting again." in source
-    assert "Great, that's everything I needed. Thanks for getting it sorted out!" in source
+    assert 'manual version of Scenario Lab' in source
+    assert 'Please go ahead and fix it.' in source
+    assert "I've already tried the basic steps on my side" in source
+    assert "No, that's everything. Thanks for getting it sorted out." in source
 
 
 def test_v11_chinese_concepts_have_name_and_value_localization():
@@ -59,13 +59,14 @@ def test_v11_progress_does_not_consume_patience_and_can_raise_trust():
 def test_v11_manual_authorized_fix_can_progress_to_resolution_after_realistic_pacing():
     profile, backend = generate_manual_context("payment", seed=11)
     state = new_manual_state(capacity_k=4, backend_events=backend, profile=profile)
-    # Manual mode now mirrors Scenario Lab pacing: discovery first, diagnosis on turn 3,
-    # then a later explicit authorization can resolve the simulated backend.
+    # Manual mode mirrors Scenario Lab: three context turns, then a diagnostic turn,
+    # followed by one natural authorization that completes the simulated remediation.
     apply_manual_customer_message(state, "My payment keeps failing.")
     apply_manual_customer_message(state, "I need it to work today.")
     apply_manual_customer_message(state, "I've already retried it several times.")
+    assert not any(c.name == "root_cause" for c in state.concepts)
+    apply_manual_customer_message(state, "What is actually causing this?")
     assert any(c.name == "root_cause" for c in state.concepts)
-    apply_manual_customer_message(state, "What exactly would your fix change?")
     apply_manual_customer_message(state, "That makes sense. Please go ahead with that fix.")
     authoritative = next(c for c in state.concepts if c.name == "authoritative_status")
     assert authoritative.value == "resolved"

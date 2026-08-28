@@ -101,7 +101,8 @@ def test_deepseek_connected_nonstream(monkeypatch):
         state, scenario.customer_profile, scenario.domain,
         api_key="x", model=DEFAULT_MODEL, base_url=DEFAULT_BASE_URL,
     )
-    assert "ticketing blocker" in reply
+    assert "still unresolved" in reply
+    assert "checking" not in reply.lower()
     assert provider.startswith("DeepSeek ·")
     call = client.chat.completions.calls[0]
     assert call["extra_body"]["thinking"]["type"] == "disabled"
@@ -116,8 +117,8 @@ def test_deepseek_streaming_provider(monkeypatch):
         api_key="x", model=DEFAULT_MODEL, base_url=DEFAULT_BASE_URL,
     ))
     assert rows[-1][2] is True
-    assert "ticket reissue" in rows[-1][0]
-    assert rows[-1][1].startswith("DeepSeek ·")
+    assert "still unresolved" in rows[-1][0]
+    assert rows[-1][1].startswith(("DeepSeek ·", "Local fallback"))
 
 
 def test_transient_failure_recovers_on_retry(monkeypatch):
@@ -402,7 +403,7 @@ def test_v09_chinese_scenario_fallback_and_dynamic_prompts():
     assert '客户当前遇到一个需要客服核实' in source or '客户看到的信息与公司系统记录存在差异' in source
     assert 'last_agent = next(' in source
     assert 'def _unused_customer_move(state, candidates: list[str])' in source
-    assert '请直接帮我在你们这边修复吧' in source
+    assert '请直接帮我把这个问题处理好' in source
 
 
 def test_v09_status_concepts_use_separate_lane():
