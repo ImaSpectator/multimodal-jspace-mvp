@@ -25,12 +25,12 @@ def _kwargs():
     )
 
 
-def test_v144_website_download_uses_stable_plain_transcript_entrypoint():
+def test_v144_website_download_uses_plain_transcript_renderer():
     source = (ROOT / "frontend" / "app.py").read_text()
-    assert "from backend.jspace.conversation_export import build_conversation_pdf" in source
-    assert "pdf_bytes = build_conversation_pdf(" in source
+    assert "def build_website_plain_transcript_pdf(" in source
+    assert "pdf_bytes = build_website_plain_transcript_pdf(" in source
     assert 'file_name=f"jspace_{mode}_{state.session_id}_transcript.pdf"' in source
-    assert 'key=f"download_pdf_plain_v145_{state.session_id}"' in source
+    assert 'key=f"download_pdf_plain_v146_{state.session_id}"' in source
     assert "from backend.jspace.conversation_export import build_plain_transcript_pdf" not in source
 
 

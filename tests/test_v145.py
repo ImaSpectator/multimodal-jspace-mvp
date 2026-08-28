@@ -5,10 +5,11 @@ from backend.jspace.conversation_export import build_conversation_pdf, build_pla
 ROOT = Path(__file__).parents[1]
 
 
-def test_v145_app_does_not_import_new_pdf_symbol_at_startup():
+def test_v145_app_does_not_depend_on_backend_pdf_symbol_at_startup():
     source = (ROOT / "frontend" / "app.py").read_text()
-    assert "from backend.jspace.conversation_export import build_conversation_pdf" in source
+    assert "from backend.jspace.conversation_export import build_conversation_pdf" not in source
     assert "from backend.jspace.conversation_export import build_plain_transcript_pdf" not in source
+    assert "def build_website_plain_transcript_pdf(" in source
 
 
 def test_v145_stable_export_name_is_the_canonical_implementation():

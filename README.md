@@ -1,3 +1,9 @@
+# v1.4.6 website PDF sample parity
+
+- The Streamlit download button now uses an **in-app copy of the approved v1.4.3 plain-transcript renderer**. It no longer imports or calls `backend.jspace.conversation_export` for website downloads, so a stale backend module cannot bring back the legacy chat-card PDF during redeploy.
+- The downloadable PDF format is the approved sample format: normal flowing text, `Turn`, `Customer`, `Support Agent`, response-source trace, and a separate plain-text conversation-analysis section.
+- The backend exporter remains for backward compatibility and tests, but it is not on the website download path.
+
 # JSpace Live — v1.4.5
 
 
