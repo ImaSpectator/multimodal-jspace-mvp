@@ -90,7 +90,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-APP_VERSION = "1.3.3-pdf-toolbar-polish"
+APP_VERSION = "1.4.0-natural-manual-pdf"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -312,12 +312,15 @@ hr { border-color:rgba(140,175,215,.12)!important; }
   margin:0!important; padding:0!important; font-size:1.18rem!important; line-height:1.18rem!important; text-align:center!important;
 }
 /* Material glyph optical centers sit slightly left inside Streamlit's icon wrapper.
-   Shift only the four utility glyphs—not the EN/中文 control—2px right. */
+   Move the four right-side utility icons farther right.  The gear needs a tiny
+   additional optical correction compared with help/link/refresh. */
 .st-key-top_help [data-testid="stIconMaterial"],
 .st-key-top_share [data-testid="stIconMaterial"],
-.st-key-top_reset [data-testid="stIconMaterial"],
+.st-key-top_reset [data-testid="stIconMaterial"] {
+  transform:translateX(4px)!important;
+}
 .st-key-top_settings [data-testid="stIconMaterial"] {
-  transform:translateX(2px)!important;
+  transform:translateX(6px)!important;
 }
 .st-key-top_language .stButton > button p {
   display:block!important; width:100%!important; margin:0!important; padding:0!important; font-size:.74rem!important;
@@ -1156,7 +1159,6 @@ def _unused_customer_move(state, candidates: list[str]) -> str:
     for candidate in candidates:
         if candidate.strip() not in used:
             return candidate
-    # If a very long session exhausts the bank, include turn context so the wording still moves forward.
     n = sum(1 for r in getattr(state, "transcript", []) if r.get("role") == "agent")
     return L(
         f"Okay. Please carry out the next concrete action from what you've already verified; this is turn {n + 1}, so I don't want to repeat earlier steps.",
@@ -1164,9 +1166,31 @@ def _unused_customer_move(state, candidates: list[str]) -> str:
     )
 
 
+def _varied_customer_move(state, candidates: list[str], salt: str) -> str:
+    """Rotate a candidate bank by session/turn so separate practices do not feel scripted."""
+    if not candidates:
+        return ""
+    customer_turns = sum(1 for r in getattr(state, "transcript", []) if r.get("role") == "customer")
+    token = f"{getattr(state, 'session_id', '')}:{customer_turns}:{salt}"
+    offset = sum((i + 1) * ord(ch) for i, ch in enumerate(token)) % len(candidates)
+    ordered = candidates[offset:] + candidates[:offset]
+    return _unused_customer_move(state, ordered)
+
+
 def suggested_customer_prompt(domain: str, state) -> str:
-    """Suggest the customer's next move, including a deterministic natural closing."""
-    if not state.transcript:
+    """Suggest a natural next customer turn using the live conversation stage.
+
+    Manual mode intentionally follows the same broad arc as Scenario Lab - opening,
+    impact, prior context, diagnosis discussion, remediation, confirmation, close -
+    while still reacting to what the agent actually said.  Suggestions are varied by
+    session and never force a fixed three-turn ending.
+    """
+    case = getattr(state, "manual_context", {}) or {}
+    customer_turns = sum(1 for r in getattr(state, "transcript", []) if r.get("role") == "customer")
+    if customer_turns == 0:
+        opening = str(case.get("opening") or "").strip()
+        if opening:
+            return opening
         return (CUSTOMER_STARTERS_ZH if _is_zh() else CUSTOMER_STARTERS).get(
             domain, L("I need help with an issue on my account. Can you check the current system status?", "我的账户有一个问题。你能帮我检查当前系统状态吗？")
         )
@@ -1174,68 +1198,92 @@ def suggested_customer_prompt(domain: str, state) -> str:
         return ""
 
     if _manual_ready_to_close(state):
-        return L(
-            "Everything looks good now. That's all I needed - thank you for your help, and have a good day!",
-            "现在一切都正常了，我这边没有其他问题。谢谢你的帮助，祝你今天愉快！",
-        )
+        return _varied_customer_move(state, [
+            L("Everything looks good now. That's all I needed - thank you for your help, and have a good day!", "现在一切都正常了，我这边没有其他问题。谢谢你的帮助，祝你今天愉快！"),
+            L("No, that's everything from me. Thanks for getting this sorted out today.", "没有其他问题了。谢谢你今天帮我把这件事处理好。"),
+            L("That was my only issue. I appreciate the help - have a good rest of your day.", "这就是我唯一的问题。谢谢你的帮助，祝你今天接下来一切顺利。"),
+        ], "closing")
 
     last_agent = next((str(row.get("text") or "") for row in reversed(state.transcript) if row.get("role") == "agent"), "")
     low = last_agent.lower()
     action = str(getattr(state, "recommended_action_code", "") or "")
 
+    # Early discovery mirrors Scenario Lab instead of jumping straight to remediation.
+    if customer_turns == 1:
+        impact = str(case.get("impact") or "").strip()
+        candidates = [x for x in [
+            impact,
+            L("This is time-sensitive for me. Can you tell me what you can verify on your side before I try anything else?", "这件事对我比较紧急。你能先告诉我你们后台能核实到什么，再让我做其他操作吗？"),
+            L("The main thing I need is a clear answer on whether this is an account/system problem or something I need to fix myself.", "我最需要的是先确认：这是账户/系统侧的问题，还是需要我自己处理的问题。"),
+        ] if x]
+        return _varied_customer_move(state, candidates, "impact")
+
+    if customer_turns == 2:
+        prior = str(case.get("followup") or "").strip()
+        candidates = [x for x in [
+            prior,
+            L("I want to make sure we don't repeat steps I've already done. What does the current system record show?", "我想避免重复已经做过的步骤。现在后台记录具体显示什么？"),
+            L("I've already spent some time troubleshooting this. Please use that context and tell me what you're checking next.", "我已经花了一些时间排查这个问题。请基于这些信息继续，并告诉我下一步在检查什么。"),
+        ] if x]
+        return _varied_customer_move(state, candidates, "prior-context")
+
+    if state.conflicts:
+        return _varied_customer_move(state, [
+            L("That still doesn't match what I see. Please verify the authoritative record and explain which status I should trust.", "这还是和我看到的不一致。请核对权威记录，并告诉我应该相信哪个状态。"),
+            L("I understand there is a mismatch. Can you reconcile the two records before we decide what to do next?", "我明白现在有信息不一致。能不能先把两边记录核对清楚，再决定下一步？"),
+            L("Please use the backend record and the evidence I've already provided to narrow down the actual blocker.", "请结合后台记录和我已经提供的证据，进一步定位真正的阻塞点。"),
+            L("Before we move on, can you tell me what the system currently considers unresolved?", "在继续之前，你能告诉我系统目前到底认为什么还没有解决吗？"),
+        ], "conflict")
+
     if action == "act_on_root_cause":
-        return _unused_customer_move(state, [
-            L("That explanation makes sense. Please go ahead with the concrete fix you just described and let me know when the system updates.", "这个解释说得通。请直接按你刚才说的方案处理，系统更新后告诉我结果。"),
+        # First discuss the diagnosis; only a later suggestion authorizes the fix.
+        if customer_turns < 4:
+            return _varied_customer_move(state, [
+                L("Okay, that explains the symptom. What exactly can you change on your side to fix that cause?", "好的，这解释了现象。针对这个原因，你们系统侧具体能做什么修复？"),
+                L("That makes more sense. Before we change anything, what should I expect to happen if that diagnosis is correct?", "这样就说得通了。在做更改之前，如果这个诊断正确，我应该预期看到什么变化？"),
+                L("Can you connect that root cause to what I'm seeing and tell me the safest next action?", "你能把这个根因和我看到的现象对应起来，并告诉我最稳妥的下一步吗？"),
+                L("What did you verify that points to that cause, and what would the fix actually change?", "你核实到了什么才判断是这个原因？修复后具体会改变什么？"),
+            ], "diagnosis-discussion")
+        return _varied_customer_move(state, [
+            L("That explanation makes sense. Please go ahead with the concrete fix you described and let me know when the system updates.", "这个解释说得通。请直接按你刚才说的方案处理，系统更新后告诉我结果。"),
             L("Yes, please apply that fix now. I'll confirm what I see once the change reaches my side.", "可以，请现在直接执行这个修复。我会在变化同步到我这边后确认结果。"),
-            L("Go ahead with the remediation. I don't need another explanation unless something blocks the change.", "请直接进行修复。如果没有新的阻塞，就不需要再重复解释了。"),
-            L("Please proceed with the system-side action and tell me the result once it completes.", "请继续执行系统侧操作，完成后直接告诉我结果。"),
-            L("I'm ready for you to make that change. Please do it now and then verify the final status.", "我这边可以了，请现在执行这个更改，然后核实最终状态。"),
-        ])
+            L("I'm comfortable proceeding. Please make the system-side change and then verify the final status.", "我同意继续。请执行系统侧更改，然后核实最终状态。"),
+            L("Go ahead with the remediation. Once it completes, please confirm the authoritative status for me.", "请继续进行修复。完成后请帮我确认权威系统里的最终状态。"),
+        ], "authorize-fix")
+
     if action == "avoid_repetition":
-        return _unused_customer_move(state, [
+        return _varied_customer_move(state, [
             L("I've already completed those steps, so please skip the repeats and move to the next system-side check.", "这些步骤我已经做过了，请不要再重复，让我们直接进入下一项系统侧检查。"),
             L("Let's use the results from the troubleshooting I've already done and continue from there.", "请直接沿用我已经完成的排查结果，从那里继续处理。"),
-            L("I don't want to repeat the same checks again. Please move to the next action that can actually change the outcome.", "我不想再重复相同检查了。请进入真正能改变结果的下一步操作。"),
-            L("You already have those results. Please use them and continue with a new diagnostic step.", "这些结果你已经有了，请直接利用它们并进入新的诊断步骤。"),
-        ])
-    if state.conflicts:
-        return _unused_customer_move(state, [
-            L("That still doesn't match what I see. Please verify the authoritative record and resolve the system-side mismatch before we move on.", "这还是和我看到的不一致。请核对权威记录，并先把系统侧的不一致处理掉再继续。"),
-            L("I understand there is a mismatch. Please keep the case open and check the specific blocker rather than asking me to retry anything.", "我明白现在存在信息不一致。请保持工单开启并检查具体阻塞点，不要再让我重复重试。"),
-            L("Please use the backend record and the evidence I've already provided to decide the next concrete action.", "请直接结合后台记录和我已经提供的证据，采取下一步具体处理动作。"),
-            L("I'm okay waiting while you reconcile those records. Please come back with the concrete result rather than another generic status update.", "我可以等你把这些记录核对清楚。请直接告诉我具体结果，不要再给泛化的状态更新。"),
-        ])
+            L("I don't want to repeat the same checks again. What is the next new diagnostic you can run?", "我不想再重复相同检查了。你接下来能做什么新的诊断？"),
+        ], "avoid-repeat")
 
     if any(k in low for k in ["confirmation number", "reservation number", "order number", "booking reference", "ticket number"]):
-        return _unused_customer_move(state, [
+        return _varied_customer_move(state, [
             L("I have the reference ready. I'll provide it now so you can continue the verification.", "我已经准备好相关编号了，我现在提供给你，请继续核实。"),
             L("Here is the reference you asked for. Please use it and continue the check from there.", "这是你需要的编号，请直接用它继续核实。"),
-        ])
-    if any(k in low for k in ["24", "48", "business day", "within", "timeframe", "eta"]):
-        return _unused_customer_move(state, [
-            L("Understood. I'll wait for that timeframe; if it passes without an update, I'll come back with this case reference.", "明白了。我会等到这个时间点；如果到时还没有更新，我会带着这个工单信息再回来。"),
-            L("That timeline works for me. Please keep the case moving and I'll watch for the update.", "这个时间线可以。我会留意后续更新，请继续推进这个问题。"),
-        ])
-    if any(k in low for k in ["verify", "checking", "investigat", "look into", "review", "核实", "检查", "调查"]):
-        return _unused_customer_move(state, [
-            L("Please continue that check and tell me what changes once you verify the blocker.", "请继续核查，确认阻塞点后告诉我系统发生了什么变化。"),
-            L("Thanks - I'll wait while you verify it. Please use what I've already provided rather than restarting the troubleshooting.", "好的，我等你核实。请直接使用我已经提供的信息，不要重新开始排查。"),
-            L("What have you verified so far, and which single check comes next?", "目前已经核实了什么？接下来最关键的一项检查是什么？"),
-            L("Please finish that verification first. Once you have the result, tell me the action you can take from it.", "请先完成这项核实。拿到结果后，直接告诉我基于结果可以采取什么动作。"),
-        ])
-    if any(k in low for k in ["blocker", "cause", "root cause", "preventing", "holding", "根因", "阻塞"]):
-        return _unused_customer_move(state, [
-            L("Now that you've identified the blocker, please apply the fix instead of doing more general troubleshooting.", "既然已经找到阻塞原因，请直接采取修复动作，不要再做泛化排查。"),
-            L("That gives me enough context. Please move from diagnosis to the actual fix now.", "这些信息已经足够了，请从诊断阶段进入实际修复。"),
-        ])
+        ], "reference")
 
-    return _unused_customer_move(state, [
-        L("Please keep moving this forward and use the next system-side action that can actually change the outcome.", "请继续推进，直接采取能够真正改变结果的下一项系统侧动作。"),
-        L("I've given you the relevant context. Please continue from here without making me repeat it.", "相关信息我都已经提供了，请从这里继续处理，不要让我重复说明。"),
-        L("What is the one thing you still need to verify before you can act?", "在你采取行动之前，还剩哪一件最关键的事情需要核实？"),
-        L("Okay, please proceed with the next concrete step and tell me the result.", "好的，请直接进行下一步具体操作，然后告诉我结果。"),
-        L("I'm following. Please continue with the action that gets us closest to a verified resolution.", "我明白了。请继续采取最接近确认解决问题的下一项动作。"),
-    ])
+    if any(k in low for k in ["24", "48", "business day", "within", "timeframe", "eta"]):
+        return _varied_customer_move(state, [
+            L("Understood. What should I watch for during that timeframe, and when should I contact you again if nothing changes?", "明白了。在这段时间里我应该关注什么？如果没有变化，我应该什么时候再联系你们？"),
+            L("That timeline works for me. Please tell me what status will confirm the process is actually complete.", "这个时间线可以。请告诉我看到什么状态才算真正处理完成。"),
+        ], "timeframe")
+
+    if any(k in low for k in ["verify", "checking", "investigat", "look into", "review", "核实", "检查", "调查"]):
+        return _varied_customer_move(state, [
+            L("Please continue that check and tell me what changes once you verify the blocker.", "请继续核查，确认阻塞点后告诉我系统发生了什么变化。"),
+            L("What have you verified so far, and which single check comes next?", "目前已经核实了什么？接下来最关键的一项检查是什么？"),
+            L("Thanks - I'll wait while you verify it. Please use what I've already provided rather than restarting the troubleshooting.", "好的，我等你核实。请直接使用我已经提供的信息，不要重新开始排查。"),
+            L("Once you finish that verification, can you tell me the action you can take from the result?", "完成这项核实后，你能直接告诉我基于结果可以采取什么动作吗？"),
+        ], "verification")
+
+    return _varied_customer_move(state, [
+        L("What is the most useful thing you can verify next without making me repeat earlier information?", "在不让我重复之前信息的前提下，你接下来最有价值的一项核实是什么？"),
+        L("Okay, keep going from what we've already established. What's the next concrete step?", "好的，请基于我们已经确认的信息继续。下一步具体是什么？"),
+        L("Can you tell me what you know now that you didn't know at the start of the conversation?", "你现在掌握了哪些一开始还不知道的信息？"),
+        L("Please continue with the next check that would actually change the decision or resolution path.", "请继续做下一项真正会影响判断或解决路径的检查。"),
+    ], "default")
 
 
 def _queue_manual_suggestion(suggestion: str) -> None:

@@ -571,11 +571,28 @@ def generate_manual_context(domain: str, seed: int | None = None) -> tuple[dict,
     b = blueprints[domain]
     profile = _profile(rng, domain)
     status_type, status_value, status_evidence = b["status_event"]
+    # Manual mode now uses the same pacing idea as Scenario Lab: the company record
+    # does not reveal the root cause on the very first customer message.  The hidden
+    # case plan is carried in SessionState.manual_context and released as the
+    # conversation progresses, which prevents the old three-turn diagnose/fix/bye loop.
+    root_event = _event(
+        "diagnostic", "root_cause", b["root_cause"], evidence=b["root_evidence"],
+        relevance=1.0, confidence=0.99,
+    )
+    profile["_manual_case"] = {
+        "opening": b["opening"],
+        "impact": b["impact"],
+        "followup": b["followup"],
+        "apparent": b["apparent"],
+        "final": b["final"],
+        "root_cause": b["root_cause"],
+        "root_evidence": b["root_evidence"],
+        "root_cause_event": root_event.model_dump(),
+    }
     events = [
         _event("profile", "customer_domain", domain, evidence=f"customer service domain={domain}", relevance=0.99, confidence=0.99),
         _event("relationship", "relationship_state", profile["relationship"], evidence=f"CRM relationship={profile['relationship']}", relevance=0.48, confidence=0.95),
         _event(status_type, "authoritative_status", status_value, evidence=status_evidence,
                relevance=0.99, confidence=0.995, conflict_importance=0.72),
-        _event("diagnostic", "root_cause", b["root_cause"], evidence=b["root_evidence"], relevance=1.0, confidence=0.99),
     ]
     return profile, events

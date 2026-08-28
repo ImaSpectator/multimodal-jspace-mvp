@@ -1,22 +1,16 @@
-# JSpace Live — v1.3.3
+# JSpace Live — v1.4.0
 
 ## Updates
 
-- Top-right controls remain a **borderless website-style toolbar** in normal page flow. The four utility glyphs receive a small optical 2px right shift so Help, link, reset, and settings appear visually centered.
-- Manual mode now has a deterministic **natural closing path**: once the issue is effectively resolved, conflicts are gone, and the customer is satisfied, the suggested customer move becomes a final thanks/goodbye. The agent replies once with a closing remark and the session ends immediately.
-- Suggested customer moves now avoid reusing customer text already present in the transcript, reducing prompt cycling in longer Manual conversations.
-- Rebuilt PDF chat rendering as a **single aligned transcript table**: each turn has a fixed speaker column and a full message column. There is no left/right staggering, so message blocks cannot overlap or appear offset in different PDF viewers.
-- Post-session **Analyze conversation** and **Save conversation as PDF** remain available after the session ends.
-- Moved the top-right toolbar higher and made the controls visually lighter: Help, link, reset, and settings are compact **borderless header icons** with only a subtle hover state.
-- Fixed Manual suggested-prompt progression again. Each agent turn gets a new suggestion-button identity, and repeated states now rotate through multiple natural customer moves instead of getting stuck after the first couple of turns.
-- Suggested customer moves continue to mix acknowledgements, instructions, corrections, authorization to proceed, and occasional targeted questions rather than creating endless question loops.
-- Customer **starting Patience is scenario-dependent** rather than always 100. Relationship quality, recent support contacts, communication style, and urgency of the service domain influence the starting level.
-- Patience still stays stable when support is moving forward and drops when the exchange stalls, repeats work, falls back, or leaves conflict unresolved. In Manual mode, if Patience falls below 0, the customer automatically ends the session.
-- Added **Analyze conversation** after a conversation ends. DeepSeek produces a concise outcome/quality/JSpace analysis; a local analysis is used if the provider is unavailable.
-- Added **Save conversation as PDF** after a conversation ends. The report includes the transcript, final Patience/Trust/Satisfaction, session metadata, provider labels, and the generated analysis when available. English and Simplified Chinese PDF output are both supported.
-- Existing v1.1 behavior remains: dynamic Trust, localized Chinese JSpace concepts, settings persistence across tabs, mode-specific Manual inputs, Hy-ASR audio, YT-VITA video, DeepSeek text/images, bilingual scenarios, hidden scenario length, Settings-gated Researcher View, and clipboard-only link sharing.
-- The global **English / 中文** language switch remains available across Scenario Lab, Manual mode, conversation analysis, and PDF export.
-- Active model IDs: `deepseek/deepseek-v4-flash-vision-exp` for text/images, `hy-asr-3.0-preview` for standalone audio transcription, and `youtu-vita` for video understanding.
+- Manual Multimodal AI now follows a **Scenario-Lab-like conversation arc** instead of preloading the diagnosis and collapsing into the same three turns. The simulated backend starts unresolved, reveals the root cause after a short discovery exchange, then waits for a later explicit customer authorization before marking the remediation resolved.
+- Suggested customer prompts are now **stage-aware and session-varied**. They progress through opening, impact, prior context, diagnosis discussion, remediation authorization, confirmation, and a natural goodbye while still reacting to the latest agent reply. Different sessions rotate through different wording instead of always showing the same few prompts.
+- Manual agent instructions now enforce more realistic pacing: early turns discover and verify, diagnosis turns explain the connection between cause and symptom, and the agent cannot claim a fix completed until the authoritative backend status is actually resolved.
+- The resolved customer closes naturally, the agent gives one final thank-you/goodbye, and the session ends immediately; analysis and PDF export remain available afterward.
+- Rebuilt the PDF exporter again using **independent full-width transcript cards**. Customer and Support Agent turns have different backgrounds and left accent bars, each message is formatted as its own single-cell block, and long wrapped model output no longer shares a nested/alternating layout that can overlap.
+- The PDF header now uses a clean metadata grid for domain, channel, session, phase, Patience, Trust, Satisfaction, and message count; optional conversation analysis appears in a separate report section. English and Simplified Chinese remain supported.
+- Adjusted top-right icon optical alignment again: Help, link, and reset move 4 px right, while Settings receives a 6 px correction because the gear glyph is visually left-heavy in Streamlit's Material icon wrapper.
+- Existing multimodal routing remains unchanged: `deepseek/deepseek-v4-flash-vision-exp` for text/images, `hy-asr-3.0-preview` for standalone audio transcription, and `youtu-vita` for video understanding.
+- The global **English / 中文** switch remains available across Scenario Lab, Manual mode, analysis, and PDF export.
 
 ## Speed profiles
 

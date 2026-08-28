@@ -27,6 +27,11 @@ def _label(en: str, zh: str, language: str) -> str:
     return zh if _font(language) == "STSong-Light" else en
 
 
+def _text(value: object) -> str:
+    """Escape user/model output once and preserve intentional line breaks."""
+    return escape(str(value or "")).replace("\n", "<br/>")
+
+
 def build_conversation_pdf(
     *,
     transcript: list[dict],
@@ -39,127 +44,219 @@ def build_conversation_pdf(
     language: str = "English",
     analysis: str | None = None,
 ) -> bytes:
-    """Create a compact, downloadable conversation report PDF entirely in memory."""
+    """Build a clean transcript report with non-overlapping, full-width turn cards.
+
+    Each customer/agent message is formatted independently before it is placed into a
+    single-cell ReportLab table.  There are no nested chat bubbles, alternating x
+    offsets, or lists of flowables inside table cells, which avoids the overlap seen
+    in earlier exports when long messages wrapped across lines/pages.
+    """
     buf = BytesIO()
     font = _font(language)
     doc = SimpleDocTemplate(
         buf,
         pagesize=letter,
-        rightMargin=0.58 * inch,
-        leftMargin=0.58 * inch,
+        rightMargin=0.62 * inch,
+        leftMargin=0.62 * inch,
         topMargin=0.58 * inch,
         bottomMargin=0.58 * inch,
         title="JSpace Live Conversation",
         author="JSpace Live",
     )
     styles = getSampleStyleSheet()
+
     title = ParagraphStyle(
-        "JTitle", parent=styles["Title"], fontName=font, fontSize=19, leading=23,
-        alignment=TA_CENTER, textColor=colors.HexColor("#16324A"), spaceAfter=12,
+        "JTitle",
+        parent=styles["Title"],
+        fontName=font,
+        fontSize=18,
+        leading=22,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#16324A"),
+        spaceAfter=5,
     )
-    h2 = ParagraphStyle(
-        "JH2", parent=styles["Heading2"], fontName=font, fontSize=12.5, leading=16,
-        textColor=colors.HexColor("#244B67"), spaceBefore=10, spaceAfter=6,
+    subtitle = ParagraphStyle(
+        "JSubtitle",
+        parent=styles["BodyText"],
+        fontName=font,
+        fontSize=8.6,
+        leading=11.5,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#617486"),
+        spaceAfter=10,
     )
-    body = ParagraphStyle(
-        "JBody", parent=styles["BodyText"], fontName=font, fontSize=9.5, leading=13.2,
-        textColor=colors.HexColor("#202B35"), spaceAfter=5, wordWrap="CJK",
+    section = ParagraphStyle(
+        "JSection",
+        parent=styles["Heading2"],
+        fontName=font,
+        fontSize=12.5,
+        leading=16,
+        textColor=colors.HexColor("#244B67"),
+        spaceBefore=8,
+        spaceAfter=7,
     )
-    meta = ParagraphStyle(
-        "JMeta", parent=body, fontSize=8.6, leading=12, textColor=colors.HexColor("#5A6D7D"),
+    meta_label = ParagraphStyle(
+        "JMetaLabel",
+        parent=styles["BodyText"],
+        fontName=font,
+        fontSize=7.2,
+        leading=9,
+        textColor=colors.HexColor("#6A7D8C"),
+        spaceAfter=1,
     )
-    customer_style = ParagraphStyle(
-        "Customer", parent=body, leftIndent=0, rightIndent=0, spaceBefore=0, spaceAfter=0,
-        fontSize=9.6, leading=13.8,
+    meta_value = ParagraphStyle(
+        "JMetaValue",
+        parent=styles["BodyText"],
+        fontName=font,
+        fontSize=9.0,
+        leading=11.2,
+        textColor=colors.HexColor("#223645"),
     )
-    agent_style = ParagraphStyle(
-        "Agent", parent=body, leftIndent=0, rightIndent=0, spaceBefore=0, spaceAfter=0,
-        fontSize=9.6, leading=13.8,
+    turn_label = ParagraphStyle(
+        "JTurnLabel",
+        parent=styles["BodyText"],
+        fontName=font,
+        fontSize=7.5,
+        leading=9.5,
+        textColor=colors.HexColor("#60798D"),
+        spaceAfter=3,
     )
-
-    story = [
-        Paragraph(_label("JSpace Live Conversation", "JSpace Live 对话记录", language), title),
-        Paragraph(
-            escape(
-                f"{_label('Domain', '领域', language)}: {domain}   |   "
-                f"{_label('Channel', '渠道', language)}: {channel}   |   "
-                f"{_label('Session', '会话', language)}: {session_id}"
-            ), meta,
-        ),
-        Paragraph(
-            escape(
-                f"{_label('Patience', '耐心度', language)}: {max(0, int(profile.get('patience', 0)))}/100   |   "
-                f"{_label('Trust', '信任度', language)}: {int(profile.get('trust', 0))}/100   |   "
-                f"{_label('Satisfaction', '满意度', language)}: {satisfaction:.0f}/100   |   "
-                f"{_label('Phase', '阶段', language)}: {phase}"
-            ), meta,
-        ),
-        Spacer(1, 8),
-        Paragraph(_label("Conversation", "对话", language), h2),
-    ]
-
-    speaker_style = ParagraphStyle(
-        "Speaker", parent=body, fontName=font, fontSize=9.7, leading=12.2,
-        textColor=colors.HexColor("#17354D"), spaceBefore=0, spaceAfter=0,
+    turn_message = ParagraphStyle(
+        "JTurnMessage",
+        parent=styles["BodyText"],
+        fontName=font,
+        fontSize=9.8,
+        leading=14.0,
+        textColor=colors.HexColor("#172A38"),
+        wordWrap="CJK",
+        splitLongWords=True,
     )
     provider_style = ParagraphStyle(
-        "Provider", parent=meta, fontName=font, fontSize=7.4, leading=9.2,
-        textColor=colors.HexColor("#65798A"), spaceBefore=0, spaceAfter=0,
+        "JProvider",
+        parent=styles["BodyText"],
+        fontName=font,
+        fontSize=7.1,
+        leading=9.2,
+        textColor=colors.HexColor("#728595"),
+        spaceBefore=3,
+    )
+    analysis_style = ParagraphStyle(
+        "JAnalysis",
+        parent=styles["BodyText"],
+        fontName=font,
+        fontSize=9.3,
+        leading=13.5,
+        textColor=colors.HexColor("#243744"),
+        wordWrap="CJK",
+        spaceAfter=5,
     )
 
-    # Render each turn as a single full-width transcript row: fixed speaker column on
-    # the left, message content on the right. There is no alternating horizontal
-    # offset, so PDF viewers cannot visually stack or overlap customer/agent cards.
-    speaker_col = 1.08 * inch
-    message_col = doc.width - speaker_col
+    story: list = [
+        Paragraph(_label("JSpace Live Conversation", "JSpace Live 对话记录", language), title),
+        Paragraph(
+            _label(
+                "Customer-service practice transcript",
+                "客服练习对话记录",
+                language,
+            ),
+            subtitle,
+        ),
+    ]
+
+    # A simple metadata grid replaces the old compressed inline header.
+    meta_rows = [
+        [
+            [Paragraph(_label("DOMAIN", "领域", language), meta_label), Paragraph(_text(domain), meta_value)],
+            [Paragraph(_label("CHANNEL", "渠道", language), meta_label), Paragraph(_text(channel), meta_value)],
+        ],
+        [
+            [Paragraph(_label("SESSION", "会话", language), meta_label), Paragraph(_text(session_id), meta_value)],
+            [Paragraph(_label("PHASE", "阶段", language), meta_label), Paragraph(_text(phase), meta_value)],
+        ],
+        [
+            [Paragraph(_label("PATIENCE", "耐心度", language), meta_label), Paragraph(f"{max(0, int(profile.get('patience', 0)))}/100", meta_value)],
+            [Paragraph(_label("TRUST", "信任度", language), meta_label), Paragraph(f"{int(profile.get('trust', 0))}/100", meta_value)],
+        ],
+        [
+            [Paragraph(_label("SATISFACTION", "满意度", language), meta_label), Paragraph(f"{satisfaction:.0f}/100", meta_value)],
+            [Paragraph(_label("MESSAGES", "消息数", language), meta_label), Paragraph(str(sum(1 for r in transcript if r.get('role') in {'customer', 'agent'})), meta_value)],
+        ],
+    ]
+    meta_table = Table(meta_rows, colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
+    meta_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7FAFC")),
+        ("BOX", (0, 0), (-1, -1), 0.55, colors.HexColor("#D8E2EA")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E3EAF0")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.extend([meta_table, Spacer(1, 12), Paragraph(_label("Conversation transcript", "对话记录", language), section)])
+
+    turn_number = 0
     for row in transcript:
         role = str(row.get("role") or "customer")
         if role not in {"customer", "agent"}:
             continue
-        who = _label("Customer", "客户", language) if role == "customer" else _label("Support Agent", "客服", language)
-        message_text = escape(str(row.get("text") or "")).replace("\n", "<br/>")
+        turn_number += 1
+        is_customer = role == "customer"
+        who = _label("CUSTOMER", "客户", language) if is_customer else _label("SUPPORT AGENT", "客服", language)
+        role_bg = colors.HexColor("#EEF6FF") if is_customer else colors.HexColor("#F4F6F8")
+        border = colors.HexColor("#6EA8D9") if is_customer else colors.HexColor("#8193A2")
+        role_text = colors.HexColor("#225F91") if is_customer else colors.HexColor("#4F6575")
+
+        # A single composed Paragraph is the only flowable inside the message cell.
+        # This makes wrapping deterministic and prevents customer/agent cards from
+        # colliding even when model output is long.
+        turn_label.textColor = role_text
+        label_html = f"<b>{escape(who)}</b> / {_label('Turn', '第', language)} {turn_number}"
+        message = _text(row.get("text") or "")
+        content = [
+            Paragraph(label_html, turn_label),
+            Paragraph(message, turn_message),
+        ]
         provider = str(row.get("provider") or "").strip().replace("·", "-")
+        if provider and not is_customer:
+            content.append(Paragraph(f"{_label('Provider', '模型来源', language)}: {_text(provider)}", provider_style))
 
-        speaker_bg = colors.HexColor("#DCEAF7") if role == "customer" else colors.HexColor("#E7EDF4")
-        message_bg = colors.HexColor("#F5F9FD") if role == "customer" else colors.HexColor("#FAFBFD")
-        rule = colors.HexColor("#B8CADB") if role == "customer" else colors.HexColor("#CBD5DF")
-
-        message_flow = [Paragraph(message_text, customer_style if role == "customer" else agent_style)]
-        if provider and role == "agent":
-            message_flow.append(Spacer(1, 3))
-            message_flow.append(Paragraph(escape(provider), provider_style))
-
-        turn = Table(
-            [[Paragraph(f"<b>{escape(who)}</b>", speaker_style), message_flow]],
-            colWidths=[speaker_col, message_col],
-            hAlign="LEFT",
-            splitByRow=1,
-        )
-        turn.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (0, 0), speaker_bg),
-            ("BACKGROUND", (1, 0), (1, 0), message_bg),
-            ("BOX", (0, 0), (-1, -1), 0.45, rule),
-            ("LINEAFTER", (0, 0), (0, 0), 0.45, rule),
-            ("LEFTPADDING", (0, 0), (0, 0), 9),
-            ("RIGHTPADDING", (0, 0), (0, 0), 8),
-            ("TOPPADDING", (0, 0), (0, 0), 10),
-            ("BOTTOMPADDING", (0, 0), (0, 0), 10),
-            ("LEFTPADDING", (1, 0), (1, 0), 11),
-            ("RIGHTPADDING", (1, 0), (1, 0), 11),
-            ("TOPPADDING", (1, 0), (1, 0), 9),
-            ("BOTTOMPADDING", (1, 0), (1, 0), 9),
+        card = Table([[content]], colWidths=[doc.width], hAlign="LEFT", splitByRow=1)
+        card.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), role_bg),
+            ("BOX", (0, 0), (-1, -1), 0.55, colors.HexColor("#D4E0E9")),
+            ("LINEBEFORE", (0, 0), (0, 0), 3.0, border),
+            ("LEFTPADDING", (0, 0), (-1, -1), 13),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 13),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
-        story.append(turn)
-        story.append(Spacer(1, 8))
+        story.append(card)
+        story.append(Spacer(1, 7))
 
     if analysis:
-        story.extend([Spacer(1, 10), Paragraph(_label("Conversation analysis", "对话分析", language), h2)])
+        story.extend([
+            Spacer(1, 8),
+            Paragraph(_label("Conversation analysis", "对话分析", language), section),
+        ])
+        analysis_card_content = []
         for block in str(analysis).split("\n"):
             if block.strip():
-                story.append(Paragraph(escape(block.strip()), body))
+                analysis_card_content.append(Paragraph(_text(block.strip()), analysis_style))
             else:
-                story.append(Spacer(1, 4))
+                analysis_card_content.append(Spacer(1, 3))
+        analysis_card = Table([[analysis_card_content]], colWidths=[doc.width], hAlign="LEFT")
+        analysis_card.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FBFCFD")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D8E2EA")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(analysis_card)
 
     doc.build(story)
     return buf.getvalue()

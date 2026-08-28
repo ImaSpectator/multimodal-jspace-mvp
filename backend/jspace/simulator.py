@@ -134,21 +134,46 @@ def update_customer_relationship(profile: dict, state: SessionState, reply: str,
 
 
 def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
-    """Let manual practice progress after the customer authorizes a concrete fix.
+    """Advance hidden manual-case evidence with Scenario-Lab-like pacing.
 
-    Manual mode has simulated backend state, so without an explicit progression event an
-    unresolved authoritative status could remain stuck forever. This keeps the research
-    case controlled while allowing a natural multi-turn path to resolution.
+    The previous implementation exposed the root cause at session start and allowed a
+    second customer message containing "go ahead" to resolve the case.  That made the
+    suggested path collapse into the same three turns every time.  Manual mode now
+    reveals diagnosis after a short discovery exchange and only commits the simulated
+    remediation after the customer has had a chance to discuss the cause and authorize
+    the fix later in the conversation.
     """
     low = (text or "").lower()
     customer_turns = sum(1 for row in state.transcript if row.get("role") == "customer")
+
+    # Stage 1 -> Stage 2: after opening + impact + prior context, the diagnostic
+    # becomes available.  This mirrors Scenario Lab's explicit diagnostic step.
+    has_root = any(c.name == "root_cause" for c in state.concepts)
+    if customer_turns >= 3 and not has_root:
+        raw = (state.manual_context or {}).get("root_cause_event")
+        if raw:
+            try:
+                event = BackendEvent.model_validate(raw)
+                state.backend_history.append(event.model_dump())
+                merge_concepts(state.concepts, extract_from_backend(event))
+                refresh_state(state)
+                has_root = True
+            except Exception:
+                # A malformed optional case-plan entry should never break a live chat.
+                pass
+
+    # Stage 2 -> Stage 3: do not let the first mention of a fix instantly complete
+    # the case.  A normal conversation gets at least one turn to discuss the
+    # diagnosis before an explicit authorization can resolve the simulated backend.
     action_language = any(token in low for token in [
-        "go ahead", "please do", "please apply", "please proceed", "proceed", "make that change", "fix it", "please resolve",
-        "you can do that", "that works", "请继续", "请处理", "请帮我处理", "可以处理",
+        "go ahead", "please do", "please apply", "please proceed", "proceed",
+        "make that change", "fix it", "please resolve", "you can do that",
+        "that works", "do it", "请继续", "请处理", "请帮我处理", "可以处理",
         "就按这个做", "请修复", "请把", "那就这样处理",
     ])
-    if customer_turns < 2 or not action_language:
+    if customer_turns < 5 or not has_root or not action_language:
         return
+
     authoritative = next((c for c in state.concepts if c.name == "authoritative_status"), None)
     if not authoritative or str(authoritative.value).lower() == "resolved":
         return
@@ -158,7 +183,7 @@ def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
         metadata={
             "concept_name": "authoritative_status",
             "concept_value": "resolved",
-            "evidence": "simulated support remediation completed after the customer authorized the concrete fix",
+            "evidence": "simulated support remediation completed after diagnosis discussion and explicit customer authorization",
             "relevance": 1.0,
             "confidence": 0.995,
             "conflict_importance": 0.0,
@@ -263,10 +288,12 @@ def new_manual_state(
     backend_events: list[BackendEvent] | None = None,
     profile: dict | None = None,
 ) -> SessionState:
+    profile = profile or {}
     state = SessionState(
         session_id=f"manual_{uuid4().hex[:10]}",
         config=SessionConfig(capacity_k=capacity_k, preserve_conflicts=True),
-        customer_satisfaction=_initial_satisfaction(profile or {}),
+        customer_satisfaction=_initial_satisfaction(profile),
+        manual_context=deepcopy(profile.get("_manual_case", {})),
     )
     for event in backend_events or []:
         state.backend_history.append(event.model_dump())

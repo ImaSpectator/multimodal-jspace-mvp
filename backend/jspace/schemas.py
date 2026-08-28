@@ -94,6 +94,7 @@ class SessionState(BaseModel):
     conflicts: list[Conflict] = Field(default_factory=list)
     transcript: list[dict] = Field(default_factory=list)
     backend_history: list[dict] = Field(default_factory=list)
+    manual_context: dict = Field(default_factory=dict)
     recommended_action: Optional[str] = None
     recommended_action_code: Optional[str] = None
     last_response: Optional[str] = None

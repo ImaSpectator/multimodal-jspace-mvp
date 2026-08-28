@@ -92,6 +92,23 @@ def build_support_prompt(
     )
     previous_agent = _last_agent_reply(state)
     latest_customer = _latest_customer_message(state)
+    customer_turn_count = sum(1 for row in state.transcript if row.get("role") == "customer")
+    manual_pacing = ""
+    if str(state.session_id).startswith("manual_") and state.session_phase not in {"resolved", "closing", "ended"}:
+        if customer_turn_count <= 2:
+            manual_pacing = (
+                "This is an early manual-practice discovery turn. Do not rush to a fix or closure. "
+                "Acknowledge the newest detail, use one concrete system fact if available, and make the next check feel like a real support conversation."
+            )
+        elif state.recommended_action_code == "act_on_root_cause":
+            manual_pacing = (
+                "The diagnosis is now available. Explain how it connects to the customer's symptoms and propose the next concrete remediation, "
+                "but do not claim the remediation already completed unless authoritative_status is resolved."
+            )
+        else:
+            manual_pacing = (
+                "Keep the exchange conversational and progressive. Add a new fact, verification, or action instead of repeating the same troubleshooting language."
+            )
     anti_repeat = (
         f"\nPrevious agent reply that MUST NOT be repeated or lightly paraphrased:\n{previous_agent}\n"
         if previous_agent else ""
@@ -115,6 +132,7 @@ Goals:
 - If evidence conflicts, explain the mismatch naturally and say what you are checking next rather than repeating generic 'system of record' language.
 - If image evidence is attached, use it when it materially changes the situation.
 - {closure_rule}
+- {manual_pacing or "Use normal customer-service pacing: discover, verify, act, confirm, then close."}
 
 Domain: {domain}
 Customer context: {profile}

@@ -10,7 +10,7 @@ def _source():
 
 def test_v11_borderless_toolbar_and_link_icon():
     source = _source()
-    assert 'APP_VERSION = "1.3.3-pdf-toolbar-polish"' in source
+    assert 'APP_VERSION = "1.4.0-natural-manual-pdf"' in source
     assert ':material/link:' in source
     assert 'background:transparent!important; box-shadow:none!important;' in source
     assert 'border:0!important' in source
@@ -19,7 +19,7 @@ def test_v11_borderless_toolbar_and_link_icon():
 
 def test_v11_suggested_moves_are_not_question_only():
     source = _source()
-    assert 'Suggest the customer\'s next move, including a deterministic natural closing.' in source
+    assert 'Suggest a natural next customer turn using the live conversation stage.' in source
     assert 'Please go ahead with the concrete fix' in source
     assert 'please skip the repeats and move to the next system-side check' in source
     assert "Everything looks good now. That's all I needed" in source
@@ -56,10 +56,16 @@ def test_v11_progress_does_not_consume_patience_and_can_raise_trust():
     assert profile["trust"] >= original_trust
 
 
-def test_v11_manual_authorized_fix_can_progress_to_resolution():
+def test_v11_manual_authorized_fix_can_progress_to_resolution_after_realistic_pacing():
     profile, backend = generate_manual_context("payment", seed=11)
     state = new_manual_state(capacity_k=4, backend_events=backend, profile=profile)
-    apply_manual_customer_message(state, "Please check the blocker first.")
+    # Manual mode now mirrors Scenario Lab pacing: discovery first, diagnosis on turn 3,
+    # then a later explicit authorization can resolve the simulated backend.
+    apply_manual_customer_message(state, "My payment keeps failing.")
+    apply_manual_customer_message(state, "I need it to work today.")
+    apply_manual_customer_message(state, "I've already retried it several times.")
+    assert any(c.name == "root_cause" for c in state.concepts)
+    apply_manual_customer_message(state, "What exactly would your fix change?")
     apply_manual_customer_message(state, "That makes sense. Please go ahead with that fix.")
     authoritative = next(c for c in state.concepts if c.name == "authoritative_status")
     assert authoritative.value == "resolved"
