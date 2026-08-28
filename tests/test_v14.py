@@ -42,8 +42,9 @@ def test_v14_manual_agent_prompt_has_real_conversation_pacing():
 
 def test_v14_pdf_uses_independent_full_width_cards():
     src = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert "single-cell ReportLab table" in src
-    assert "colWidths=[doc.width]" in src
+    assert "archive-friendly conversation report" in src
+    assert "PageBreak()" in src
+    assert "Customer and support messages are preserved in chronological order" in src
     pdf = build_conversation_pdf(
         transcript=[
             {"role": "customer", "text": "Customer detail " * 80},
@@ -64,6 +65,6 @@ def test_v14_pdf_uses_independent_full_width_cards():
 
 def test_v14_toolbar_optical_offsets():
     source = (ROOT / "frontend" / "app.py").read_text()
-    assert 'APP_VERSION = "1.4.0-natural-manual-pdf"' in source
+    assert 'APP_VERSION = "1.4.1-pdf-natural-dialogue"' in source
     assert "transform:translateX(4px)!important" in source
-    assert "transform:translateX(6px)!important" in source
+    assert source.count("transform:translateX(4px)!important") >= 2

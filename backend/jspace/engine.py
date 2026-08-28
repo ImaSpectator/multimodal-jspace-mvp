@@ -334,9 +334,9 @@ def synthesize_response(state: SessionState) -> str:
         "angry": "I can see why this is frustrating.",
         "frustrated": "I can see you've already spent time on this.",
         "impatient": "I'll keep this focused and avoid repeating steps.",
-        "anxious": "I'll verify the current state so you have a clear answer.",
+        "anxious": "I checked the current state so I can give you a clear answer.",
         "confused": "The signals you're seeing don't line up, so I'll separate them clearly.",
-        "skeptical": "I won't ask you to rely on the screen alone — I'll use the authoritative system state.",
+        "skeptical": "I won't ask you to rely on the screen alone — I checked the authoritative system state.",
         "distressed": "I'll focus on the most immediate next step first.",
         "disappointed": "I understand why this is disappointing.",
         "relieved": "Good — we're closer to a confirmed resolution.",
@@ -348,13 +348,13 @@ def synthesize_response(state: SessionState) -> str:
     elif state.recommended_action_code == "confirm_resolution":
         body = "The system now shows the issue as resolved. Is there anything else I can help you with today?"
     elif state.recommended_action_code == "resolve_conflict":
-        body = "I'm seeing a mismatch between what appears on your side and what the system of record shows. I won't call this resolved yet; I'll verify the authoritative state and work from that."
+        body = "I checked the authoritative state, and it still conflicts with what appears on your side. I won't call this resolved yet because the backend record is still incomplete."
     elif state.recommended_action_code == "act_on_root_cause" and active.get("root_cause"):
-        body = f"I found the underlying issue: {active['root_cause'].value}. I'll use that cause to take the next concrete step instead of sending you through generic troubleshooting again."
+        body = f"I found the underlying issue: {active['root_cause'].value}. That finding explains the symptom, and I can address that specific cause instead of sending you through generic troubleshooting again."
     elif state.recommended_action_code == "avoid_repetition":
         body = "You already completed that troubleshooting, so I won't make you repeat it. I'll move to the next diagnostic step."
     elif state.recommended_action_code == "investigate":
-        body = "The authoritative system still shows this as unresolved. I'll keep the case open and check the specific blocker before I give you a resolution."
+        body = "I checked the authoritative system, and it still shows this as unresolved. The issue is not confirmed fixed yet, so I'll keep the case open rather than give you a false resolution."
     else:
         body = "Tell me the part that matters most right now, and I'll focus on the next useful step."
     return f"{prefix} {body}".strip()

@@ -10,7 +10,7 @@ def _source():
 
 def test_v11_borderless_toolbar_and_link_icon():
     source = _source()
-    assert 'APP_VERSION = "1.4.0-natural-manual-pdf"' in source
+    assert 'APP_VERSION = "1.4.1-pdf-natural-dialogue"' in source
     assert ':material/link:' in source
     assert 'background:transparent!important; box-shadow:none!important;' in source
     assert 'border:0!important' in source
@@ -19,10 +19,10 @@ def test_v11_borderless_toolbar_and_link_icon():
 
 def test_v11_suggested_moves_are_not_question_only():
     source = _source()
-    assert 'Suggest a natural next customer turn using the live conversation stage.' in source
-    assert 'Please go ahead with the concrete fix' in source
-    assert 'please skip the repeats and move to the next system-side check' in source
-    assert "Everything looks good now. That's all I needed" in source
+    assert 'Suggest the next *customer* line, not an instruction to the support agent.' in source
+    assert 'Please go ahead and fix that on your side.' in source
+    assert "I've done that already, so please don't send me through the same troubleshooting again." in source
+    assert "Great, that's everything I needed. Thanks for getting it sorted out!" in source
 
 
 def test_v11_chinese_concepts_have_name_and_value_localization():

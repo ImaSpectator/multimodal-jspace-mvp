@@ -140,8 +140,8 @@ def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
     second customer message containing "go ahead" to resolve the case.  That made the
     suggested path collapse into the same three turns every time.  Manual mode now
     reveals diagnosis after a short discovery exchange and only commits the simulated
-    remediation after the customer has had a chance to discuss the cause and authorize
-    the fix later in the conversation.
+    remediation after the customer has had a chance to hear the cause and explicitly authorize
+    the fix on a later turn.
     """
     low = (text or "").lower()
     customer_turns = sum(1 for row in state.transcript if row.get("role") == "customer")
@@ -171,7 +171,7 @@ def _maybe_advance_manual_resolution(state: SessionState, text: str) -> None:
         "that works", "do it", "请继续", "请处理", "请帮我处理", "可以处理",
         "就按这个做", "请修复", "请把", "那就这样处理",
     ])
-    if customer_turns < 5 or not has_root or not action_language:
+    if customer_turns < 4 or not has_root or not action_language:
         return
 
     authoritative = next((c for c in state.concepts if c.name == "authoritative_status"), None)

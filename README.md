@@ -1,16 +1,16 @@
-# JSpace Live — v1.4.0
-
-Webiste URL: https://multimodal-jspace-mvp-xl8khikqwpvcxh44x3cjvq.streamlit.app/
+# JSpace Live — v1.4.1
 
 ## Updates
 
+- PDF export is redesigned as an archive-friendly conversation report with session details, readable metric cards, full-width message records, page numbers, and analysis on a separate page.
+- Manual suggested customer messages now sound like customer speech rather than diagnostic instructions; acknowledgements and context statements are allowed instead of forcing a question every turn.
+- Manual support replies treat the simulated case state as the completed result of a backend check, so the agent says whether the issue is confirmed/unconfirmed instead of repeatedly promising to verify it later.
+- A natural fourth-turn customer authorization can complete the simulated remediation after diagnosis, avoiding the old verify-again loop.
+- Settings gear optical offset moved 2 px left (6 px -> 4 px).
 - Manual Multimodal AI now follows a **Scenario-Lab-like conversation arc** instead of preloading the diagnosis and collapsing into the same three turns. The simulated backend starts unresolved, reveals the root cause after a short discovery exchange, then waits for a later explicit customer authorization before marking the remediation resolved.
 - Suggested customer prompts are now **stage-aware and session-varied**. They progress through opening, impact, prior context, diagnosis discussion, remediation authorization, confirmation, and a natural goodbye while still reacting to the latest agent reply. Different sessions rotate through different wording instead of always showing the same few prompts.
-- Manual agent instructions now enforce more realistic pacing: early turns discover and verify, diagnosis turns explain the connection between cause and symptom, and the agent cannot claim a fix completed until the authoritative backend status is actually resolved.
+- Manual agent instructions now enforce more realistic pacing: early turns report the current simulated backend result directly, diagnosis turns explain the connection between cause and symptom, and the agent cannot claim a fix completed until the authoritative backend status is actually resolved.
 - The resolved customer closes naturally, the agent gives one final thank-you/goodbye, and the session ends immediately; analysis and PDF export remain available afterward.
-- Rebuilt the PDF exporter again using **independent full-width transcript cards**. Customer and Support Agent turns have different backgrounds and left accent bars, each message is formatted as its own single-cell block, and long wrapped model output no longer shares a nested/alternating layout that can overlap.
-- The PDF header now uses a clean metadata grid for domain, channel, session, phase, Patience, Trust, Satisfaction, and message count; optional conversation analysis appears in a separate report section. English and Simplified Chinese remain supported.
-- Adjusted top-right icon optical alignment again: Help, link, and reset move 4 px right, while Settings receives a 6 px correction because the gear glyph is visually left-heavy in Streamlit's Material icon wrapper.
 - Existing multimodal routing remains unchanged: `deepseek/deepseek-v4-flash-vision-exp` for text/images, `hy-asr-3.0-preview` for standalone audio transcription, and `youtu-vita` for video understanding.
 - The global **English / 中文** switch remains available across Scenario Lab, Manual mode, analysis, and PDF export.
 

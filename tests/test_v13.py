@@ -13,21 +13,21 @@ def _source():
 
 def test_v13_toolbar_is_fixed_borderless_and_top_right():
     source = _source()
-    assert 'APP_VERSION = "1.4.0-natural-manual-pdf"' in source
+    assert 'APP_VERSION = "1.4.1-pdf-natural-dialogue"' in source
     assert 'position:fixed!important' not in source
     assert 'st.columns([12.0, 1.15, .72, .72, .72, .72]' in source
     assert 'border:0!important' in source
     assert 'background:transparent!important' in source
     assert ':material/settings:' in source and ':material/help:' in source and ':material/link:' in source
     assert 'transform:translateX(4px)!important' in source
-    assert 'transform:translateX(6px)!important' in source
+    assert source.count('transform:translateX(4px)!important') >= 2
 
 
 def test_v13_suggestions_have_unused_move_and_closing_logic():
     source = _source()
     assert 'def _unused_customer_move' in source
     assert 'if _manual_ready_to_close(state):' in source
-    assert "Everything looks good now. That's all I needed" in source
+    assert "Great, that's everything I needed. Thanks for getting it sorted out!" in source
     assert 'anything else' in source and 'other questions' in source
 
 
@@ -45,10 +45,10 @@ def test_v13_manual_closing_turn_ends_after_agent_goodbye():
 
 def test_v13_pdf_uses_full_width_separate_message_cards():
     source = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert 'single-cell ReportLab table' in source
-    assert 'colWidths=[doc.width]' in source
-    assert '("LINEBEFORE", (0, 0), (0, 0), 3.0, border)' in source
-    assert 'nested chat bubbles' in source
+    assert 'archive-friendly conversation report' in source
+    assert 'PageBreak()' in source
+    assert 'borderPadding' in source
+    assert 'nested flowables and offset chat bubbles' in source
     pdf = build_conversation_pdf(
         transcript=[
             {"role":"customer","text":"This is a longer customer message that should wrap safely without touching the next message. " * 4},

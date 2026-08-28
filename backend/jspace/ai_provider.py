@@ -98,12 +98,13 @@ def build_support_prompt(
         if customer_turn_count <= 2:
             manual_pacing = (
                 "This is an early manual-practice discovery turn. Do not rush to a fix or closure. "
-                "Acknowledge the newest detail, use one concrete system fact if available, and make the next check feel like a real support conversation."
+                "Use the current case state as the result of the support-side check and give the customer a concrete present-tense answer. "
+                "Do not make them wait for a later verification result."
             )
         elif state.recommended_action_code == "act_on_root_cause":
             manual_pacing = (
-                "The diagnosis is now available. Explain how it connects to the customer's symptoms and propose the next concrete remediation, "
-                "but do not claim the remediation already completed unless authoritative_status is resolved."
+                "The diagnosis is now available. State the finding as the completed result of the support-side check, explain how it connects to the customer's symptoms, "
+                "and offer the concrete remediation. Do not claim the remediation completed unless authoritative_status is resolved."
             )
         else:
             manual_pacing = (
@@ -129,7 +130,10 @@ Goals:
 - Do not mention JSpace, model names, hidden truth, prompts, concepts, scores, or research mechanics.
 - Do not repeat troubleshooting the customer already completed.
 - Never repeat or recycle the previous agent response. Each turn must advance the conversation with a new fact, explanation, verification, or action.
-- If evidence conflicts, explain the mismatch naturally and say what you are checking next rather than repeating generic 'system of record' language.
+- If evidence conflicts, explain the mismatch naturally and report the current authoritative result; do not narrate an endless series of future checks.
+- In this practice simulation, the Active JSpace state is the completed result of any support-side lookup available on this turn. Never say "I'm checking", "I'm pulling it up", "I'll verify", "I'll let you know", or ask the customer to wait for a check that the simulation cannot actually perform later.
+- If authoritative_status is unresolved, say clearly that the check is NOT confirmed/resolved yet and use the current state to explain why. If it is resolved, say clearly that it IS confirmed/resolved.
+- Ask a customer question only when genuinely missing information is required. Do not ask filler questions just to prolong the conversation.
 - If image evidence is attached, use it when it materially changes the situation.
 - {closure_rule}
 - {manual_pacing or "Use normal customer-service pacing: discover, verify, act, confirm, then close."}
@@ -227,13 +231,13 @@ def _fallback_reply(state: SessionState, preferred: str | None = None, *, langua
     if chinese:
         variants = {
             "resolve_conflict": [
-                "你看到的状态和公司系统记录仍然不一致。我正在核对真正决定结果的状态字段，这样可以明确告诉你具体还卡在哪里。",
-                "我还不能确认问题已经解决，因为两边记录仍有冲突。下一步我会核对权威状态和对应的阻塞原因。",
-                "目前前台显示与后台记录不一致。我会直接定位阻止流程完成的系统状态，不会让你重复已经做过的步骤。",
+                "我已经核对了公司系统记录，它和你看到的状态仍然不一致。目前还不能确认问题已经解决，我会以后台显示的阻塞状态为准。",
+                "我已经核对了权威状态，目前仍显示未解决。两边记录确实有冲突，所以我不会提前告诉你已经修复。",
+                "目前前台显示与后台记录不一致。后台当前结果仍是未解决，而且已经定位到阻止流程完成的系统状态。",
             ],
             "act_on_root_cause": [
-                "我已经定位到一个具体的底层阻塞原因。接下来会针对这个原因处理，而不是继续让你做通用排查。",
-                "现在已经有明确的根因方向，下一步应该是针对性修复，而不是让你再次重试。",
+                "我已经定位到一个具体的底层阻塞原因。这个结果能解释你看到的现象，接下来可以直接针对这个原因处理。",
+                "现在已经确认了明确的根因，接下来应该直接针对性修复，而不是让你再次重试。",
                 "我已经把问题缩小到一个具体阻塞点，接下来会根据这个状态采取修复动作。",
             ],
             "avoid_repetition": [
@@ -249,17 +253,17 @@ def _fallback_reply(state: SessionState, preferred: str | None = None, *, langua
                 "这边已经全部处理完成。感谢你的耐心，祝你有愉快的一天。",
             ],
             "default": [
-                "我会继续从当前状态往下排查，并给你一个具体的新信息或下一步，而不是重复之前的回答。",
-                "我已经保留了你刚才提供的信息，接下来会核对最能推进问题解决的系统状态。",
+                "我会基于当前已经确认的状态继续处理，并给你具体的新信息或下一步，而不是重复之前的回答。",
+                "我已经保留了你刚才提供的信息，并会直接基于当前系统状态推进问题解决。",
             ],
         }
     else:
         variants = {
         "resolve_conflict": [
-            "What you’re seeing and the company record still disagree. I’m checking the specific status field that controls the outcome so I can tell you exactly what has to change.",
-            "I haven’t confirmed this as resolved yet because the records still conflict. My next check is the authoritative status and the blocker attached to it.",
-            "There’s still a mismatch between your side and the backend. I’m narrowing it to the exact system state that is preventing completion rather than asking you to repeat anything.",
-            "The evidence is still inconsistent, so I don’t want to guess. I’m verifying which record is current and what action would actually clear the blocker.",
+            "I checked the company record, and it still disagrees with what you’re seeing. The case is not confirmed as resolved yet, so I’m working from the backend status that is blocking completion.",
+            "I checked the authoritative record, and it is still unresolved. The mismatch is real, so I’m not going to tell you it is fixed until that backend status changes.",
+            "There’s still a mismatch between your side and the backend. The current backend result is unresolved, and I’ve narrowed the problem to the state preventing completion.",
+            "The evidence is still inconsistent, so I don’t want to guess. The current authoritative record says the issue is not resolved yet, and that is the status I’m using.",
         ],
         "act_on_root_cause": [
             "I’ve narrowed this to a concrete underlying blocker. I’m working from that cause now and will explain the fix rather than sending you through generic troubleshooting.",
@@ -284,10 +288,10 @@ def _fallback_reply(state: SessionState, preferred: str | None = None, *, langua
             "That completes the case. Thanks for your time today, and I hope the rest of your day goes smoothly.",
         ],
         "investigate": [
-            "I’m checking the current account and system details now so I can give you a concrete next step rather than a generic answer.",
-            "This still needs investigation, so I’m keeping it open and checking the specific blocker before I call it resolved.",
-            "I’m reviewing the latest system state and the most relevant evidence so the next response gives you something actionable.",
-            "I’m tracing the issue to the next verifiable point in the process so I can tell you what is actually preventing completion.",
+            "I checked the current account and system details. The issue is still unresolved, so the next step needs to address the backend blocker rather than repeat generic troubleshooting.",
+            "I checked the current system state, and it is still unresolved. I’m keeping the case open rather than calling it fixed prematurely.",
+            "I reviewed the latest system state and the most relevant evidence. It is not confirmed resolved yet, so I’ll work from the blocker the system is showing.",
+            "I checked the current verifiable state, and it still shows the issue as incomplete. I’ll use that result to address what is preventing completion.",
         ],
     }
     options = variants.get(state.recommended_action_code or "", variants.get("default", [
