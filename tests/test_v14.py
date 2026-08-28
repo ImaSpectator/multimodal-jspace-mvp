@@ -41,11 +41,12 @@ def test_v14_manual_agent_prompt_has_real_conversation_pacing():
     assert "never create a fake waiting period" in prompt
 
 
-def test_v14_pdf_uses_independent_full_width_cards():
+def test_v14_pdf_uses_plain_line_by_line_transcript():
     src = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert "archive-quality conversation record" in src
-    assert "PageBreak()" in src
-    assert "one self-contained block" in src
+    assert "ordinary flowing text" in src
+    assert "Table(" not in src
+    assert 'Paragraph(_label("Customer", "客户", language)' in src
+    assert 'Paragraph(_label("Support Agent", "客服", language)' in src
     pdf = build_conversation_pdf(
         transcript=[
             {"role": "customer", "text": "Customer detail " * 80},
@@ -61,11 +62,11 @@ def test_v14_pdf_uses_independent_full_width_cards():
         language="English",
         analysis="The agent identified the blocker and confirmed the final state.",
     )
-    assert pdf.startswith(b"%PDF") and len(pdf) > 2500
+    assert pdf.startswith(b"%PDF") and len(pdf) > 2000
 
 
 def test_v14_toolbar_optical_offsets():
     source = (ROOT / "frontend" / "app.py").read_text()
-    assert 'APP_VERSION = "1.4.2-scenario-parity-pdf-rework"' in source
+    assert 'APP_VERSION = "1.4.3-plain-transcript-bilingual-conflicts"' in source
     assert "transform:translateX(4px)!important" in source
     assert source.count("transform:translateX(4px)!important") >= 2

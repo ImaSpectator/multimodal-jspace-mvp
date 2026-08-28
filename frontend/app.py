@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import inspect
 import os
+import re
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -90,7 +91,7 @@ def update_customer_relationship(profile: dict, state, reply: str, provider: str
     profile["trust"] = int(round(max(0.0, min(100.0, float(profile.get("trust", 55)) + trust_delta))))
 
 
-APP_VERSION = "1.4.2-scenario-parity-pdf-rework"
+APP_VERSION = "1.4.3-plain-transcript-bilingual-conflicts"
 
 DOMAIN_DESCRIPTIONS = {
     "account_access": "Login, authentication, identity verification, lockouts, and account recovery.",
@@ -949,6 +950,16 @@ def display_conflict_severity(severity: str) -> str:
     en, zh = CONFLICT_SEVERITY_LABELS.get(key, (f"{key.upper()} PRIORITY SIGNAL CONFLICT", f"{key}优先级信号冲突"))
     return zh if _is_zh() else en
 
+
+def display_conflict_description(conflict) -> str:
+    """Show the conflict explanation in the active UI language."""
+    if _is_zh():
+        localized = str(getattr(conflict, "description_zh", "") or "").strip()
+        if localized:
+            return localized
+    return str(getattr(conflict, "description", "") or "")
+
+
 def render_workspace(state, *, show_coaching: bool = True) -> None:
     st.markdown(L("#### Live JSpace", "#### 实时 JSpace"))
     if show_coaching:
@@ -971,7 +982,7 @@ def render_workspace(state, *, show_coaching: bool = True) -> None:
     if state.conflicts:
         for conflict in state.conflicts:
             st.markdown(
-                f'<div class="j-card j-conflict"><div class="j-card-title">{html.escape(display_conflict_severity(conflict.severity))}</div><div class="j-card-value">{html.escape(conflict.description)}</div></div>',
+                f'<div class="j-card j-conflict"><div class="j-card-title">{html.escape(display_conflict_severity(conflict.severity))}</div><div class="j-card-value">{html.escape(display_conflict_description(conflict))}</div></div>',
                 unsafe_allow_html=True,
             )
 

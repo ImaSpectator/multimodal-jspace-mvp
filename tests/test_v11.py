@@ -10,7 +10,7 @@ def _source():
 
 def test_v11_borderless_toolbar_and_link_icon():
     source = _source()
-    assert 'APP_VERSION = "1.4.2-scenario-parity-pdf-rework"' in source
+    assert 'APP_VERSION = "1.4.3-plain-transcript-bilingual-conflicts"' in source
     assert ':material/link:' in source
     assert 'background:transparent!important; box-shadow:none!important;' in source
     assert 'border:0!important' in source

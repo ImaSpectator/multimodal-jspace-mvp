@@ -54,6 +54,7 @@ class Conflict(BaseModel):
     id: str
     concept_ids: list[str]
     description: str
+    description_zh: Optional[str] = None
     severity: Literal["low", "medium", "high"]
     confidence: float = Field(ge=0.0, le=1.0)
 

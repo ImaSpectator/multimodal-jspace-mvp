@@ -16,6 +16,33 @@ RESOLVED_VISUAL_VALUES = {
     "upgrade complete", "completed",
 }
 
+CONFLICT_VALUE_ZH = {
+    "appears successful": "看起来已成功",
+    "delivered": "已送达",
+    "wifi visible": "Wi-Fi 可见",
+    "partial access": "部分访问",
+    "cancellation requested": "已请求取消",
+    "new itinerary visible": "新行程已显示",
+    "return completed": "退货已完成",
+    "100% progress": "进度显示 100%",
+    "connected": "已连接",
+    "workspace visible": "工作区可见",
+    "adjusted badge": "已显示调整标记",
+    "confirmed": "已确认",
+    "active": "有效",
+    "upgrade visible": "升级信息可见",
+    "cancelled": "已取消",
+    "ticket visible": "票券可见",
+    "upgrade complete": "升级已完成",
+    "completed": "已完成",
+}
+
+CONFLICT_EMOTION_ZH = {
+    "uncertain": "不确定", "confused": "困惑", "anxious": "焦虑", "disappointed": "失望",
+    "frustrated": "沮丧", "angry": "生气", "impatient": "不耐烦", "skeptical": "怀疑",
+    "distressed": "难受",
+}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -232,6 +259,7 @@ def detect_conflicts(concepts: list[Concept]) -> list[Conflict]:
             id=_cid("conflict"),
             concept_ids=[customer_status.id, authoritative.id],
             description="The customer believes the issue is resolved, but the authoritative system still shows it as unresolved.",
+            description_zh="客户认为问题已经解决，但权威系统仍显示为未解决。",
             severity="high",
             confidence=0.98,
         ))
@@ -244,6 +272,7 @@ def detect_conflicts(concepts: list[Concept]) -> list[Conflict]:
             id=_cid("conflict"),
             concept_ids=[visible.id, authoritative.id],
             description=f"Customer-facing evidence suggests '{visible.value}', while the authoritative system remains unresolved.",
+            description_zh=f"面向客户的证据显示“{CONFLICT_VALUE_ZH.get(visible.value.lower(), visible.value)}”，但权威系统仍显示问题尚未解决。",
             severity="high",
             confidence=0.96,
         ))
@@ -258,6 +287,7 @@ def detect_conflicts(concepts: list[Concept]) -> list[Conflict]:
             id=_cid("conflict"),
             concept_ids=[customer_status.id, emotion.id],
             description=f"The customer says the issue is resolved, but their {emotion.value} affect remains strong ({intensity:.0%}).",
+            description_zh=f"客户表示问题已经解决，但其“{CONFLICT_EMOTION_ZH.get(emotion.value, emotion.value)}”情绪仍然较强（{intensity:.0%}）。",
             severity="medium",
             confidence=min(0.94, 0.62 + intensity * 0.32),
         ))

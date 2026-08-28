@@ -55,10 +55,10 @@ def test_v142_conflict_severity_labels_are_bilingual_and_include_priority():
     assert "display_conflict_severity(conflict.severity)" in source
 
 
-def test_v142_pdf_is_structured_report_not_chat_bubble_replica():
+def test_v142_pdf_is_not_a_chat_bubble_replica():
     source = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert "Customer Support Interaction Report" in source
-    assert "Resolution / outcome" in source
-    assert "Conversation transcript" in source
-    assert "Post-session" in source or "POST-SESSION REVIEW" in source
-    assert "screenshot-like chat export" in source
+    assert "Conversation" in source
+    assert "Conversation Analysis" in source
+    assert "ordinary flowing text" in source
+    assert "chat bubbles, cards, or tables" in source
+    assert "Table(" not in source

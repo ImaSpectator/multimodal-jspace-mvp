@@ -1,4 +1,10 @@
-# JSpace Live — v1.4.1
+# JSpace Live — v1.4.3
+
+## v1.4.3 updates
+
+- PDF export now writes the conversation as a plain flowing transcript: Turn, Customer, Support Agent, and the exact utterance text. It no longer uses chat-bubble/card/table layouts.
+- Post-session analysis remains text-first and follows the transcript on a separate page.
+- Signal-conflict explanations now carry a Simplified Chinese version, including dynamic visible-status values and customer emotions; Chinese mode no longer shows an English conflict explanation beneath a Chinese HIGH/MEDIUM/LOW label.
 
 ## Updates
 

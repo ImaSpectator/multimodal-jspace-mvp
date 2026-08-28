@@ -13,7 +13,7 @@ def _source():
 
 def test_v13_toolbar_is_fixed_borderless_and_top_right():
     source = _source()
-    assert 'APP_VERSION = "1.4.2-scenario-parity-pdf-rework"' in source
+    assert 'APP_VERSION = "1.4.3-plain-transcript-bilingual-conflicts"' in source
     assert 'position:fixed!important' not in source
     assert 'st.columns([12.0, 1.15, .72, .72, .72, .72]' in source
     assert 'border:0!important' in source
@@ -43,19 +43,19 @@ def test_v13_manual_closing_turn_ends_after_agent_goodbye():
     assert state.session_phase == "ended"
 
 
-def test_v13_pdf_uses_full_width_separate_message_cards():
+def test_v13_pdf_uses_plain_flowing_transcript_not_message_cards():
     source = (ROOT / "backend" / "jspace" / "conversation_export.py").read_text()
-    assert 'archive-quality conversation record' in source
-    assert 'PageBreak()' in source
-    assert 'one self-contained block' in source
-    assert 'screenshot-like chat export' in source
+    assert "simple, readable text record" in source
+    assert "ordinary flowing text" in source
+    assert "chat bubbles, cards, or tables" in source
+    assert "Table(" not in source
     pdf = build_conversation_pdf(
         transcript=[
-            {"role":"customer","text":"This is a longer customer message that should wrap safely without touching the next message. " * 4},
-            {"role":"agent","text":"This is a longer support response that should occupy its own bubble and remain separated from the following row. " * 4,"provider":"DeepSeek"},
+            {"role":"customer","text":"This is a longer customer message that should wrap safely as normal text. " * 4},
+            {"role":"agent","text":"This is a longer support response that should follow as normal text. " * 4,"provider":"DeepSeek"},
             {"role":"customer","text":"Thanks, that resolves it."},
         ],
         profile={"patience":70,"trust":72}, domain="Account access", channel="Text Messages",
         session_id="v13", satisfaction=90, phase="ended", language="English", analysis="Resolved successfully.",
     )
-    assert pdf.startswith(b"%PDF") and len(pdf) > 2000
+    assert pdf.startswith(b"%PDF") and len(pdf) > 1800
